@@ -23,12 +23,9 @@ import com.motivewave.platform.sdk.study.StudyHeader;
         overlay = true
 )
 public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
-    private static enum SESSIONS {
-        RTH,
-        GLOBEX,
-        EURO
-    }
-
+    final static String SESSION_RTH = "RTH";
+    final static String SESSION_JPY = "JPY";
+    final static String SESSION_LONDON = "EURO/London";
     private Map<Integer, Integer> deltas;
     private Map<Integer, Integer> rthDeltas;
     private long rthOpen; // previous RTH Open Timestamp
@@ -47,20 +44,22 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         grp.addRow(new PathDescriptor("PivotLine", "Pivot Line", Color.ORANGE, 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("HighExtensionLine", "High Extensions", Color.BLUE, 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", Color.RED, 1.0f, null, true, false, false));
+        grp.addRow(new InputDescriptor("SessionInput", "Session", new String[]{SESSION_RTH, SESSION_JPY, SESSION_LONDON}, SESSION_RTH));
 
         LocalTime rthOpenTime = LocalTime.of(9, 30);
         LocalDateTime rthOpenDateTime = LocalDateTime.of(LocalDate.now(), rthOpenTime);
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(rthOpenDateTime)) rthOpenDateTime = rthOpenDateTime.minusDays(1);
 
+        // These timestamps will be used to determine which dataseries bars are used to calculate the delta pivots
         rthOpen = rthOpenDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
         rthClose = rthOpenDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000;
         londonOpen = getLondonOpen().toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT;
         londonClose = getLondonOpen().plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-        debug("rthOpen: " + rthOpen);
-        debug("rthClose: " + rthClose);
-        debug("londonOpen: " + londonOpen);
-        debug("londonClose: " + londonClose);
+//        debug("rthOpen: " + rthOpen);
+//        debug("rthClose: " + rthClose);
+//        debug("londonOpen: " + londonOpen);
+//        debug("londonClose: " + londonClose);
 
         deltas = new HashMap<Integer, Integer>();
         rthDeltas = new HashMap<Integer, Integer>();
@@ -84,80 +83,75 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         return rthOpenDateTime;
     }
 
-
     @Override
     protected void calculateValues(DataContext ctx) {
-        SESSIONS session = SESSIONS.GLOBEX;
+        String session = getSettings().getInput("SessionInput").toString();
+        DataSeries series = ctx.getDataSeries(BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000));
 
-        SessionDeltaPivot sdp = calculateDeltasForSession(ctx, session);
-        debug("SessionDeltaPivot: Session " + sdp.getSession());
-        debug("SessionDeltaPivot: Pivot" + sdp.getPivot());
-        debug("SessionDeltaPivot: High " + sdp.getHigh());
-        debug("SessionDeltaPivot: Low " + sdp.getLow());
-        debug("SessionDeltaPivot: Breadth " + sdp.getBreadth());
-        debug("SessionDeltaPivot: Bar Index " + sdp.getBarIndex());
-        addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
+        if (series.size() != 0) {
+            SessionDeltaPivot sdp = calculateDeltasForSession(ctx, series, session);
+            debug("SessionDeltaPivot: Session " + sdp.getSession());
+            debug("SessionDeltaPivot: Pivot" + sdp.getPivot());
+            debug("SessionDeltaPivot: High " + sdp.getHigh());
+            debug("SessionDeltaPivot: Low " + sdp.getLow());
+            debug("SessionDeltaPivot: Breadth " + sdp.getBreadth());
+            debug("SessionDeltaPivot: DataSeries Bar Index " + sdp.getBarIndex());
+            addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
+        } else {
+            debug("DataSeries size is 0, skipping SDP calculation");
+        }
 
         super.calculateValues(ctx);
     }
 
-    private static class Session {
-        SESSIONS name;
-        long open;
-        long close;
-
-        public Session(SESSIONS name, long open, long close) {
-            this.name = name;
-            this.open = open;
-            this.close = close;
-        }
-        public SESSIONS getName() {
-            return this.name;
-        }
-        public long getOpen() {
-            return this.open;
-        }
-        public long getClose() {
-            return this.close;
-        }
-    }
-
-    // calculate pivots for the given session
-    private SessionDeltaPivot calculateDeltasForSession(DataContext ctx, SESSIONS session) {
-        BarSize barSize;
+    /**
+     * Calculate pivots for the given session
+     * @param ctx
+     * @param series
+     * @param session One of SESSION_RTH, SESSION_JPY, or SESSION_EURO
+     * @return
+     */
+    private SessionDeltaPivot calculateDeltasForSession(DataContext ctx, DataSeries series, String session) {
+//        BarSize barSize;
         long sessionStart;
         long sessionEnd;
         LocalDateTime sessionStartDateTime;
         switch (session) {
-            case RTH: // Calculate pivots during RTH session
+            case SESSION_RTH: // Calculate pivots during RTH session
                 sessionStartDateTime = getRthOpenLocalDateTime();
                 sessionStart = sessionStartDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
+//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
                 break;
-            case GLOBEX: // Calculate pivots during London session
+            case SESSION_LONDON: // Calculate pivots during London session
                 sessionStartDateTime = getLondonOpen();
                 sessionStart = sessionStartDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
+//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
                 break;
-            case EURO:
+            case SESSION_JPY:
             default:
                 debug("USING DEFAULT SESSION RTH for session: " + session);
                 sessionStartDateTime = getRthOpenLocalDateTime();
-                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
+//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
                 sessionStart = sessionStartDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
         }
 
         // Iterate over DataSeries and compute deltas. THe Max and Min are tracked also
-        DataSeries series = ctx.getDataSeries(barSize);
+        //DataSeries series = ctx.getDataSeries(barSize);
         int minDelta = 0;
         int minDeltaIndex = 0;
         int maxDelta = 0;
         int maxDeltaIndex = 0;
+        //debug("SERIES BARSIZE: " + series.getBarSize());
+        //debug("SERIES SIZE: " + series.size());
+        if (series.size() < 10) throw new RuntimeException();
         for (int i = 1; i < series.size(); i++) {
+            if (!series.isBarComplete(i)) continue;
             if (series.getStartTime(i) < sessionStart)
+                // todo if we're goin to calculate multiple sessions, need to instead see if series index is within
+                // session's relative open/close time instead of using an absolute datetime for open/close
                 continue; // ignore if bar is before session open
             if (series.getEndTime(i) > sessionEnd)
                 continue; // ignore if bar is after session close
@@ -170,7 +164,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 rthDeltas.put(i, delta);
                 debug("Calculated delta for index " + i + ": " + delta + " " + deltaPercent);
             } else {
-                debug("Found delta " + series.getInt(i, "Delta") + ", " + rthDeltas.get(i) + " for i " + i);
+                debug("Found delta "  + rthDeltas.get(i) + " for index " + i);
             }
 
             int delta = rthDeltas.get(i);
@@ -187,15 +181,9 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         debug("MAX NEGATIVE DELTA BAR INDEX: " + minDeltaIndex);
         debug("MAX NEGATIVE DELTA: " + minDelta);
 
-        boolean isMax = Math.abs(maxDelta) > Math.abs(minDelta);
-        int sdpIndex = isMax ? maxDeltaIndex : minDeltaIndex;
-        if (isMax) {
-            debug("Greatest Delta is POSITIVE");
-        } else {
-            debug("Greatest Delta is NEGATIVE");
-        }
+        int sdpIndex = Math.abs(maxDelta) > Math.abs(minDelta) ? maxDeltaIndex : minDeltaIndex;
 
-        SessionDeltaPivot sdp = new SessionDeltaPivot(
+        return new SessionDeltaPivot(
                 sdpIndex,
                 series.getHigh(sdpIndex),
                 series.getLow(sdpIndex),
@@ -203,49 +191,42 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 series.getStartTime(sdpIndex),
                 rthDeltas.get(sdpIndex)
         );
-
-        return sdp;
     }
 
+    /**
+     * Creates and adds the line drawings for the pivot and it's extensions
+     *
+     * @param sdp Session Delta Pivot
+     * @param defaults Defaults
+     */
     private void addFiguresForSessionDeltaPivot(SessionDeltaPivot sdp, Defaults defaults) {
-
-//        Marker rthStartArrow = new Marker(new Coordinate(ds.getStartTime(rthStartIndex), ds.getClose(rthStartIndex) - 8), Enums.MarkerType.ARROW);
-//        Marker londonStartArrow = new Marker(new Coordinate(ds.getStartTime(londonOpenIndex), ds.getClose(londonOpenIndex) - 8), Enums.MarkerType.ARROW);
-//        Marker londonEndArrow = new Marker(new Coordinate(ds.getEndTime(londonCloseIndex), ds.getClose(londonCloseIndex) - 8), Enums.MarkerType.ARROW);
-
         Marker sdpArrow = new Marker(new Coordinate(sdp.getStartTime(), sdp.getPivot() - 8), Enums.MarkerType.ARROW);
-        sdpArrow.setSize(Enums.Size.LARGE);
+        sdpArrow.setSize(Enums.Size.MEDIUM);
         sdpArrow.setFillColor(Color.ORANGE);
 
         long sdpStartTime = sdp.getStartTime();
         double sdpHigh = sdp.getHigh();
         double sdpLow = sdp.getLow();
-        double sdpBreadth = sdp.getBreadth();
         double sdpValue = sdp.getPivot();
-        double sdpHighExtension1 = sdpHigh + sdpBreadth;
-        double sdpHighExtension2 = sdpHigh + (sdpBreadth * 2);
-        double sdpHighExtension3 = sdpHigh + (sdpBreadth * 3);
-        double sdpLowExtension1 = sdpLow - sdpBreadth;
-        double sdpLowExtension2 = sdpLow - (sdpBreadth * 2);
-        double sdpLowExtension3 = sdpLow - (sdpBreadth * 3);
-
-        debug("Using index " + sdp.getBarIndex() + " with delta " + sdp.getDelta() + " for SDP");
-        debug("Using SDP Value: " + sdpValue);
-        debug("Using SDP High: " + sdpHigh);
-        debug("Using SDP Low: " + sdpLow);
+        double sdpHighExtension1 = sdp.getExtensionAbove(100);
+        double sdpHighExtension2 = sdp.getExtensionAbove(200);
+        double sdpHighExtension3 = sdp.getExtensionAbove(300);
+        double sdpLowExtension1 = sdp.getExtensionBelow(100);
+        double sdpLowExtension2 = sdp.getExtensionBelow(200);
+        double sdpLowExtension3 = sdp.getExtensionBelow(300);
 
         Settings settings = getSettings();
         PathInfo sdpPivotPathInfo = settings.getPath("PivotLine");
         PathInfo highExtensionPathInfo = settings.getPath("HighExtensionLine");
         PathInfo lowExtensionPathInfo = settings.getPath("LowExtensionLine");
 
+        // SDP pivot and high/low
         Line sdpLine = LineBuilder.create(sdpStartTime, sdpValue)
                 .setColor(sdpPivotPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(sdpPivotPathInfo.getStroke())
                 .setText("SDP: " + sdpValue)
                 .build();
-
         Line sdpHighLine = LineBuilder.create(sdpStartTime, sdpHigh)
                 .setColor(sdpPivotPathInfo.getColor())
                 .setFont(defaults.getFont())
@@ -259,7 +240,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 .setText("SDP Low: " + sdpLow)
                 .build();
 
-        // extensions
+        // extensions above/below pivot
         Line sdpHighExtensionLine1 = LineBuilder.create(sdpStartTime, sdpHighExtension1)
                 .setColor(highExtensionPathInfo.getColor())
                 .setFont(defaults.getFont())
@@ -278,7 +259,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 .setStroke(highExtensionPathInfo.getStroke())
                 .setText("SDP High Ext 3: " + sdpHighExtension3)
                 .build();
-
 
         Line sdpLowExtensionLine1 = LineBuilder.create(sdpStartTime, sdpLowExtension1)
                 .setColor(lowExtensionPathInfo.getColor())
@@ -311,24 +291,10 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         addFigure(sdpArrow);
     }
 
-    private static class SessionDeltaPivotBuilder {
-        private final SessionDeltaPivot sdp;
-
-        private SessionDeltaPivotBuilder(SessionDeltaPivot sdp) {
-            this.sdp = sdp;
-        }
-        public static SessionDeltaPivotBuilder create(SessionDeltaPivot sdp) {
-            return new SessionDeltaPivotBuilder(sdp);
-        }
-
-
-    }
-
     /**
      * Helper class for buidling lines to draw on the chart
      */
     private static class LineBuilder {
-        private Defaults defaults;
         private final Coordinate coordinate1;
         private final Coordinate coordinate2;
         private Color color;
@@ -343,11 +309,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
         public static LineBuilder create(long startTime, double value) {
             return new LineBuilder(startTime, value);
-        }
-
-        public LineBuilder setDefaults(Defaults defaults) {
-            this.defaults = defaults;
-            return this;
         }
         public LineBuilder setColor(Color color) {
             this.color = color;
@@ -383,7 +344,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         private final float low;
         private final float breadth;
         private final int barIndex;
-        private final SESSIONS session;
+        private final String session;
         private final long startTime;
         private final long delta;
 
@@ -396,7 +357,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          * @param startTime Start time of the bar used to compute the pivot levels
          * @param delta Delta of the bar
          */
-        public SessionDeltaPivot(int barIndex, float high, float low, SESSIONS session, long startTime, long delta) {
+        public SessionDeltaPivot(int barIndex, float high, float low, String session, long startTime, long delta) {
             this.barIndex = barIndex;
             this.high = high;
             this.low = low;
@@ -427,7 +388,28 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             return this.breadth;
         }
 
-        public SESSIONS getSession() {
+        /**
+         *
+         * @param percent whole value e.g. 100 for 100%, 250 for 250%
+         * @return the value of the extension
+         */
+        public float getExtensionAbove(int percent) {
+            return this.high + (this.breadth * (percent / 100));
+        }
+
+        /**
+         *
+         * @param percent whole value e.g. 100 for 100%, 250 for 250%
+         * @return the value of the extension
+         */
+        public float getExtensionBelow(int percent) {
+            return this.low - (this.breadth * (percent / 100));
+        }
+
+        /**
+         * @return The session used to calculate the pivots
+         */
+        public String getSession() {
             return this.session;
         }
 
@@ -435,6 +417,10 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             return this.startTime;
         }
 
+        /**
+         *
+         * @return the delta of the bar used to calculate the pivots
+         */
         public long getDelta() {
             return this.delta;
         }
