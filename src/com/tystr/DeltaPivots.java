@@ -1,7 +1,8 @@
-package study_examples;
+package com.tystr;
 
 import java.awt.*;
 import java.time.*;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,8 +12,9 @@ import com.motivewave.platform.sdk.draw.*;
 import com.motivewave.platform.sdk.study.StudyHeader;
 
 /**
- * This study draws a trend line on the price graph and allows the user to move it using the resize points.
- * The purpose of this example is to demonstrate advanced features such as using resize points and context menus.
+ * This study plots delta pivots and extensions
+ * @see <a href="https://www.onlyticks.com/blog-orderflowleo/session-delta-pivots"></a>
+ * @author Tyler Stroud <tyler@tylerstroud.com>
  */
 @StudyHeader(
         namespace = "com.tystr",
@@ -26,8 +28,13 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
     final static String SESSION_RTH = "RTH";
     final static String SESSION_JPY = "JPY";
     final static String SESSION_LONDON = "EURO/London";
+    final static DayOfWeek[] tradingDays = new DayOfWeek[]{
+            DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY
+    };
+
     private Map<Integer, Integer> deltas;
     private Map<Integer, Integer> rthDeltas;
+    private Map<Integer, DeltaBar> deltaBars;
     private long rthOpen; // previous RTH Open Timestamp
     private long rthClose; // previous RTH Close Timestamp
     private long londonOpen;
@@ -63,6 +70,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
         deltas = new HashMap<Integer, Integer>();
         rthDeltas = new HashMap<Integer, Integer>();
+        deltaBars = new HashMap<>();
     }
 
     private LocalDateTime getLondonOpen() {
@@ -80,6 +88,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(rthOpenDateTime)) rthOpenDateTime = rthOpenDateTime.minusDays(1);
 
+        if (rthOpenDateTime.getDayOfWeek() == DayOfWeek.SATURDAY) rthOpenDateTime = rthOpenDateTime.minusDays(1);
+
         return rthOpenDateTime;
     }
 
@@ -95,6 +105,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             debug("SessionDeltaPivot: High " + sdp.getHigh());
             debug("SessionDeltaPivot: Low " + sdp.getLow());
             debug("SessionDeltaPivot: Breadth " + sdp.getBreadth());
+            debug("SessionDeltaPivot: Delta " + sdp.getDelta());
+            debug("SessionDeltaPivot: Delta POC" + sdp.getDeltaPoc());
             debug("SessionDeltaPivot: DataSeries Bar Index " + sdp.getBarIndex());
             addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
         } else {
@@ -129,11 +141,11 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
 //                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
                 break;
-            case SESSION_JPY:
+            case SESSION_JPY: //
             default:
                 debug("USING DEFAULT SESSION RTH for session: " + session);
                 sessionStartDateTime = getRthOpenLocalDateTime();
-//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
+//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 5000);
                 sessionStart = sessionStartDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
         }
@@ -144,8 +156,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         int minDeltaIndex = 0;
         int maxDelta = 0;
         int maxDeltaIndex = 0;
-        //debug("SERIES BARSIZE: " + series.getBarSize());
-        //debug("SERIES SIZE: " + series.size());
+        DeltaBar deltaBar;
         if (series.size() < 10) throw new RuntimeException();
         for (int i = 1; i < series.size(); i++) {
             if (!series.isBarComplete(i)) continue;
@@ -156,13 +167,19 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             if (series.getEndTime(i) > sessionEnd)
                 continue; // ignore if bar is after session close
 
-            if (rthDeltas.get(i) == null) {
-                int delta = getDeltaForTicks(ctx.getInstrument().getTicks(series.getStartTime(i), series.getEndTime(i)));
+//            if (rthDeltas.get(i) == null) {
+//                int delta = getDeltaForTicks(ctx.getInstrument().getTicks(series.getStartTime(i), series.getEndTime(i)));
+            if (deltaBars.get(i) == null) {
+                deltaBar = getDeltaForTicksAsDeltaBar(ctx.getInstrument().getTicks(series.getStartTime(i), series.getEndTime(i)));
+                deltaBars.put(i, deltaBar);
+                int delta = deltaBar.getDelta();
+                debug("DELTA POC: " + deltaBar.getDeltaPOC());
                 float deltaPercent = delta / series.getVolumeAsFloat(i);
                 series.setInt(i, "Delta", delta);
                 series.setFloat(i, "DeltaPercent", deltaPercent);
                 rthDeltas.put(i, delta);
                 debug("Calculated delta for index " + i + ": " + delta + " " + deltaPercent);
+                debug("STREAM SUM DELTA: " + deltaBar.calcDelta());
             } else {
                 debug("Found delta "  + rthDeltas.get(i) + " for index " + i);
             }
@@ -184,6 +201,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         int sdpIndex = Math.abs(maxDelta) > Math.abs(minDelta) ? maxDeltaIndex : minDeltaIndex;
 
         return new SessionDeltaPivot(
+                deltaBars.get(sdpIndex),
                 sdpIndex,
                 series.getHigh(sdpIndex),
                 series.getLow(sdpIndex),
@@ -347,6 +365,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         private final String session;
         private final long startTime;
         private final long delta;
+        private final float deltaPoc;
 
         /**
          *
@@ -357,7 +376,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          * @param startTime Start time of the bar used to compute the pivot levels
          * @param delta Delta of the bar
          */
-        public SessionDeltaPivot(int barIndex, float high, float low, String session, long startTime, long delta) {
+        public SessionDeltaPivot(DeltaBar deltaBar, int barIndex, float high, float low, String session, long startTime, long delta) {
             this.barIndex = barIndex;
             this.high = high;
             this.low = low;
@@ -365,7 +384,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             this.pivot = high - (breadth / 2);
             this.session = session;
             this.startTime = startTime;
-            this.delta = delta;
+            this.delta = deltaBar.getDelta();
+            this.deltaPoc = deltaBar.getDeltaPOC();
         }
 
         public int getBarIndex() {
@@ -377,11 +397,11 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         }
 
         public float getHigh() {
-            return this.high;
+            return pivot + (breadth / 2); //this.high;
         }
 
         public float getLow() {
-            return this.low;
+            return pivot - (breadth / 2); //this.low;
         }
 
         public float getBreadth() {
@@ -394,7 +414,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          * @return the value of the extension
          */
         public float getExtensionAbove(int percent) {
-            return this.high + (this.breadth * (percent / 100));
+            return this.pivot + (breadth / 2) + (this.breadth * (percent / 100f));
         }
 
         /**
@@ -403,7 +423,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          * @return the value of the extension
          */
         public float getExtensionBelow(int percent) {
-            return this.low - (this.breadth * (percent / 100));
+            return pivot - (breadth / 2) - (this.breadth * (percent / 100f));
         }
 
         /**
@@ -424,8 +444,56 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         public long getDelta() {
             return this.delta;
         }
+
+        /**
+         *
+         * @return returns the value of the delta point of control
+         */
+        public float getDeltaPoc() {
+            return this.deltaPoc;
+        }
     }
 
+
+    private static class DeltaBar {
+        Map<Float, Integer> deltasByPrice = new HashMap<Float, Integer>();
+        private final int delta;
+
+        public DeltaBar(Map<Float, Integer> deltasByPrice) {
+            this.deltasByPrice = deltasByPrice;
+            this.delta = calcDelta();
+        }
+
+        public Map<Float, Integer> getDeltasByPrice() {
+            return deltasByPrice;
+        }
+        public int getDelta() {
+            return delta;
+        }
+        public float getDeltaPOC() {
+            return Collections.max(deltasByPrice.entrySet(), Map.Entry.comparingByValue()).getKey();
+        }
+        private int calcDelta() {
+            return deltasByPrice.values().stream().mapToInt(Integer::valueOf).sum();
+        }
+    }
+
+    protected DeltaBar getDeltaForTicksAsDeltaBar(List<Tick> ticks) {
+        Map<Float, Integer> deltasByPrice = new HashMap<Float, Integer>();
+        for (Tick tick : ticks) {
+            if (tick.isAskTick()) {
+                int deltaAtPrice = deltasByPrice.getOrDefault(tick.getAskPrice(), 0);
+                deltaAtPrice += tick.getVolume();
+                deltasByPrice.put(tick.getAskPrice(), deltaAtPrice);
+            } else {
+                int deltaAtPrice = deltasByPrice.getOrDefault(tick.getBidPrice(), 0);
+                deltaAtPrice -= tick.getVolume();
+                deltasByPrice.put(tick.getBidPrice(), deltaAtPrice);
+            }
+        }
+
+        return new DeltaBar(deltasByPrice);
+    }
 
     /**
      * Calculates the delta between bid and ask volume for the given list of ticks
