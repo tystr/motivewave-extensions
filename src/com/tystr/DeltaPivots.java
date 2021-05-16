@@ -79,6 +79,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(londonOpenDateTime)) londonOpenDateTime = londonOpenDateTime.minusDays(1);
 
+        if (londonOpenDateTime.getDayOfWeek() == DayOfWeek.SATURDAY) londonOpenDateTime = londonOpenDateTime.minusDays(1);
+
         return londonOpenDateTime;
     }
 
@@ -106,7 +108,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             debug("SessionDeltaPivot: Low " + sdp.getLow());
             debug("SessionDeltaPivot: Breadth " + sdp.getBreadth());
             debug("SessionDeltaPivot: Delta " + sdp.getDelta());
-            debug("SessionDeltaPivot: Delta POC" + sdp.getDeltaPoc());
+            debug("SessionDeltaPivot: Delta POC " + sdp.getDeltaPoc());
             debug("SessionDeltaPivot: DataSeries Bar Index " + sdp.getBarIndex());
             addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
         } else {
@@ -177,14 +179,14 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 float deltaPercent = delta / series.getVolumeAsFloat(i);
                 series.setInt(i, "Delta", delta);
                 series.setFloat(i, "DeltaPercent", deltaPercent);
-                rthDeltas.put(i, delta);
+                //rthDeltas.put(i, delta);
                 debug("Calculated delta for index " + i + ": " + delta + " " + deltaPercent);
                 debug("STREAM SUM DELTA: " + deltaBar.calcDelta());
             } else {
-                debug("Found delta "  + rthDeltas.get(i) + " for index " + i);
+                debug("Found delta "  + deltaBars.get(i).getDelta() + " for index " + i);
             }
 
-            int delta = rthDeltas.get(i);
+            int delta = deltaBars.get(i).getDelta();
             if (delta < 0 && delta < minDelta) {
                 minDelta = delta;
                 minDeltaIndex = i;
@@ -193,10 +195,10 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 maxDeltaIndex = i;
             }
         }
-        debug("MAX POSITIVE DELTA BAR INDEX: " + maxDeltaIndex);
-        debug("MAX POSITIVE DELTA: " + maxDelta);
-        debug("MAX NEGATIVE DELTA BAR INDEX: " + minDeltaIndex);
-        debug("MAX NEGATIVE DELTA: " + minDelta);
+//        debug("MAX POSITIVE DELTA BAR INDEX: " + maxDeltaIndex);
+//        debug("MAX POSITIVE DELTA: " + maxDelta);
+//        debug("MAX NEGATIVE DELTA BAR INDEX: " + minDeltaIndex);
+//        debug("MAX NEGATIVE DELTA: " + minDelta);
 
         int sdpIndex = Math.abs(maxDelta) > Math.abs(minDelta) ? maxDeltaIndex : minDeltaIndex;
 
@@ -207,7 +209,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 series.getLow(sdpIndex),
                 session,
                 series.getStartTime(sdpIndex),
-                rthDeltas.get(sdpIndex)
+                true
         );
     }
 
@@ -374,34 +376,44 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          * @param low Low of the bar used to compute the pivot levels
          * @param session The session during which the pivot was calculated
          * @param startTime Start time of the bar used to compute the pivot levels
-         * @param delta Delta of the bar
          */
-        public SessionDeltaPivot(DeltaBar deltaBar, int barIndex, float high, float low, String session, long startTime, long delta) {
+        public SessionDeltaPivot(DeltaBar deltaBar, int barIndex, float high, float low, String session, long startTime, boolean usePocAsPivot) {
             this.barIndex = barIndex;
             this.high = high;
             this.low = low;
             this.breadth = high - low;
-            this.pivot = high - (breadth / 2);
             this.session = session;
             this.startTime = startTime;
             this.delta = deltaBar.getDelta();
             this.deltaPoc = deltaBar.getDeltaPOC();
+
+            if (usePocAsPivot) {
+                this.pivot = deltaPoc;
+            } else {
+                // using mid as pivot
+                this.pivot = high - (breadth / 2);
+            }
         }
 
         public int getBarIndex() {
             return this.barIndex;
         }
 
+        /**
+         * @todo how do we determine pivot? mid? POC? ????
+         * @return
+         */
         public float getPivot() {
-            return this.pivot;
+            return deltaPoc;
+//            return this.pivot;
         }
 
         public float getHigh() {
-            return pivot + (breadth / 2); //this.high;
+            return getPivot() + (breadth / 2); //this.high;
         }
 
         public float getLow() {
-            return pivot - (breadth / 2); //this.low;
+            return getPivot() - (breadth / 2); //this.low;
         }
 
         public float getBreadth() {
@@ -456,7 +468,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
 
     private static class DeltaBar {
-        Map<Float, Integer> deltasByPrice = new HashMap<Float, Integer>();
+        private final Map<Float, Integer> deltasByPrice;
         private final int delta;
 
         public DeltaBar(Map<Float, Integer> deltasByPrice) {
