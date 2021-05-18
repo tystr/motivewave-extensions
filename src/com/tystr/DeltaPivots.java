@@ -9,6 +9,7 @@ import java.util.Map;
 import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.draw.*;
+import com.motivewave.platform.sdk.draw.Label;
 import com.motivewave.platform.sdk.study.StudyHeader;
 
 /**
@@ -80,6 +81,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         if (now.isBefore(londonOpenDateTime)) londonOpenDateTime = londonOpenDateTime.minusDays(1);
 
         if (londonOpenDateTime.getDayOfWeek() == DayOfWeek.SATURDAY) londonOpenDateTime = londonOpenDateTime.minusDays(1);
+        if (londonOpenDateTime.getDayOfWeek() == DayOfWeek.SUNDAY) londonOpenDateTime = londonOpenDateTime.minusDays(2);
 
         return londonOpenDateTime;
     }
@@ -91,6 +93,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         if (now.isBefore(rthOpenDateTime)) rthOpenDateTime = rthOpenDateTime.minusDays(1);
 
         if (rthOpenDateTime.getDayOfWeek() == DayOfWeek.SATURDAY) rthOpenDateTime = rthOpenDateTime.minusDays(1);
+        if (rthOpenDateTime.getDayOfWeek() == DayOfWeek.SUNDAY) rthOpenDateTime = rthOpenDateTime.minusDays(2);
 
         return rthOpenDateTime;
     }
