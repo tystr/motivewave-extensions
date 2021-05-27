@@ -8,59 +8,57 @@ import java.util.List;
 import java.util.Map;
 
 import com.motivewave.platform.sdk.common.*;
-import com.motivewave.platform.sdk.common.desc.BooleanDescriptor;
-import com.motivewave.platform.sdk.common.desc.DoubleDescriptor;
-import com.motivewave.platform.sdk.common.desc.EnabledDependency;
-import com.motivewave.platform.sdk.common.desc.FontDescriptor;
-import com.motivewave.platform.sdk.common.desc.InputDescriptor;
-import com.motivewave.platform.sdk.common.desc.IntegerDescriptor;
-import com.motivewave.platform.sdk.common.desc.PathDescriptor;
+import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.draw.*;
 import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
 
-/** Zig Zag */
 @StudyHeader(
         namespace="com.tystr",
         id="TYSTR_RETRACE_ZONES",
-        //rb="com.motivewave.platform.study.nls.strings",
         name="Tystr's Retrace Zones",
         desc="Plots retrace zones",
-        menu="Menu overly",
+        menu="Tystr's Studies",
         overlay=true,
         studyOverlay=false,
         underlayByDefault = true,
         supportsBarUpdates=false
-        // helpLink="http://www.motivewave.com/studies/zig_zag.htm"
+        // helpLink="http://example.com
         )
 public class RetraceZones extends Study
 {
     final static String HIGH_INPUT = "highInput", LOW_INPUT = "lowInput", REVERSAL = "reversal", REVERSAL_TICKS = "reversalTicks", USE_TICKS="useTicks";
     final static String PRICE_MOVEMENTS = "priceMovements", PRICE_LABELS = "priceLabels", RETRACE_LINE = "retraceLine";
+    final static String REBID_COLOR = "RebidColor", REOFFER_COLOR = "ReofferColor", METHOD_INPUT = "MethodInput", METHOD_1 = "Method1", METHOD_2 = "Method2";
 
     @Override
     public void initialize(Defaults defaults)
     {
         var sd = createSD();
-        var tab = sd.addTab(get("TAB_GENERAL"));
+        var tab = sd.addTab(get("General"));
 
-        var inputs = tab.addGroup(get("LBL_INPUTS"));
-        inputs.addRow(new InputDescriptor(HIGH_INPUT, get("LBL_HIGH_INPUT"), Enums.BarInput.MIDPOINT));
-        inputs.addRow(new InputDescriptor(LOW_INPUT, get("LBL_LOW_INPUT"), Enums.BarInput.MIDPOINT));
-        inputs.addRow(new IntegerDescriptor(REVERSAL_TICKS, get("LBL_REVERSAL_TICKS"), 10, 1, 99999, 1), new BooleanDescriptor(USE_TICKS, get("LBL_ENABLED"), false, false));
-        inputs.addRow(new DoubleDescriptor(REVERSAL, get("LBL_REVERSAL"), 1.0, 0.0001, 99.999, 0.0001));
-        inputs.addRow(new BooleanDescriptor(PRICE_MOVEMENTS, get("LBL_PRICE_MOVEMENTS"), true));
-        inputs.addRow(new BooleanDescriptor(PRICE_LABELS, get("LBL_PRICE_LABELS"), true));
-        inputs.addRow(new FontDescriptor(Inputs.FONT, get("LBL_FONT"), defaults.getFont()));
+        var inputs = tab.addGroup(get("Settings"));
+        inputs.addRow(new InputDescriptor(HIGH_INPUT, get("High Input"), Enums.BarInput.HIGH));
+        inputs.addRow(new InputDescriptor(LOW_INPUT, get("Low Input"), Enums.BarInput.LOW));
+        inputs.addRow(new IntegerDescriptor(REVERSAL_TICKS, get("Reversal Ticks"), 45, 1, 99999, 1), new BooleanDescriptor(USE_TICKS, get("Enabled"), true, false));
+        inputs.addRow(new DoubleDescriptor(REVERSAL, get("Reversal %"), 1.0, 0.0001, 99.999, 0.0001));
+//        inputs.addRow(new BooleanDescriptor(PRICE_MOVEMENTS, get("Price Movements"), true));
+//        inputs.addRow(new BooleanDescriptor(PRICE_LABELS, get("Price Labels"), true));
+//        inputs.addRow(new FontDescriptor(Inputs.FONT, get("Font"), defaults.getFont()));
 
-        var colors = tab.addGroup(get("LBL_COLORS"));
-        colors.addRow(new PathDescriptor(Inputs.PATH, get("LBL_LINE"), defaults.getLineColor(), 1.0f, null, true, false, false));
-        colors.addRow(new PathDescriptor(RETRACE_LINE, get("LBL_RETRACE_LINE"), defaults.getLineColor(), 1.0f, new float[] {3f, 3f}, true, false, true));
+        inputs.addRow(new InputDescriptor(METHOD_INPUT, "Method",new String[]{METHOD_1 , METHOD_2}, METHOD_1));
+
+        var colors = tab.addGroup(get("Colors"));
+//        colors.addRow(new PathDescriptor(Inputs.PATH, get("Line"), defaults.getLineColor(), 1.0f, null, true, false, false));
+        //colors.addRow(new PathDescriptor(RETRACE_LINE, get("Retrace Line"), defaults.getLineColor(), 1.0f, new float[] {3f, 3f}, true, false, true));
+        colors.addRow(new ColorDescriptor(REBID_COLOR, get("Rebid Zone"), Color.BLUE.darker()));
+        colors.addRow(new ColorDescriptor(REOFFER_COLOR, get("Reoffer Zone"), Color.RED.darker().darker().darker()));
 
         // Quick Settings (Tool Bar and Popup Editor)
-        sd.addQuickSettings(HIGH_INPUT, LOW_INPUT, REVERSAL_TICKS, USE_TICKS, REVERSAL, PRICE_MOVEMENTS, PRICE_LABELS, Inputs.FONT, Inputs.PATH, RETRACE_LINE);
-        sd.rowAlign(REVERSAL_TICKS, USE_TICKS);
+        //sd.addQuickSettings(HIGH_INPUT, LOW_INPUT, REVERSAL_TICKS, USE_TICKS, REVERSAL, PRICE_MOVEMENTS, PRICE_LABELS, Inputs.FONT, Inputs.PATH, RETRACE_LINE);
+        sd.addQuickSettings(REBID_COLOR, REOFFER_COLOR, REVERSAL_TICKS, METHOD_INPUT);
+        sd.rowAlign(REBID_COLOR, REOFFER_COLOR, REVERSAL_TICKS);
 
         sd.addDependency(new EnabledDependency(USE_TICKS, REVERSAL_TICKS));
         sd.addDependency(new EnabledDependency(false, USE_TICKS, REVERSAL));
@@ -97,7 +95,9 @@ public class RetraceZones extends Study
         var fi = s.getFont(Inputs.FONT);
         Font f = fi == null ? defaults.getFont() : fi.getFont();
         Color bgColor = defaults.getBackgroundColor();
-        Color txtColor = line.getColor();
+        Color txtColor = Color.ORANGE; //line.getColor();
+        String method = s.getInput(METHOD_INPUT).toString();
+        debug("Using method " + method + ".");
 
         var series = ctx.getDataSeries();
         var instr = ctx.getInstrument();
@@ -115,19 +115,17 @@ public class RetraceZones extends Study
         }
 
         List<Coordinate> points = new ArrayList();
-        Map<Integer, Integer> pivotBarIndexes = new HashMap<>();
-        List<Double> pivotsList = new ArrayList<>();
         for(int i = pivotBar+1; i < series.size(); i++) {
             if (!series.isBarComplete(i)) break;
             double high = series.getDouble(i, highInput);
             double low = series.getDouble(i, lowInput);
             if (up) {
-                if (drawReoffer && series.getLow(i) < lastPivotLow) {
+                if (method == METHOD_2 && drawReoffer && series.getLow(i) < lastPivotLow) {
                     debug("LOW < PIVOT");
                     double zoneHigh = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.618);
                     double zoneLow = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.382);//0.5);
-                    debug("lastPivotHigh: " + lastPivotHigh);
-                    debug("lastPivotLow: " + lastPivotLow);
+//                    debug("lastPivotHigh: " + lastPivotHigh);
+//                    debug("lastPivotLow: " + lastPivotLow);
                     debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow);
                     Box box = new Box(series.getStartTime(i), zoneHigh, series.getEndTime(series.size()-1), zoneLow);
                     box.setFillColor(Color.RED.darker().darker().darker());
@@ -140,10 +138,22 @@ public class RetraceZones extends Study
                 if (useTicks ? high - pivot >= tickAmount : (1.0-reversal)*high >= pivot) {
                     // confirmed previous low
                     points.add(new Coordinate(series.getStartTime(pivotBar), series.getLow(pivotBar)));
-//                    Marker arrow = new Marker(new Coordinate(series.getStartTime(pivotBar), series.getHigh(pivotBar) - 2), Enums.MarkerType.CIRCLE);
-//                    arrow.setSize(Enums.Size.LARGE);
-//                    arrow.setFillColor(Color.BLUE);
-//                    addFigure(Plot.PRICE, arrow);
+                    if (method == METHOD_1) {
+                        double zoneHigh = lastPivotLow + ((lastPivotHigh - lastPivotLow) * 0.618);
+                        double zoneLow = series.getLow(i) + ((lastPivotHigh - lastPivotLow) * 0.382);//0.5);
+//                        debug("lastPivotHigh: " + lastPivotHigh);
+//                        debug("lastPivotLow: " + lastPivotLow);
+//                        debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow);
+                        Box box = new Box(series.getStartTime(i), zoneHigh, series.getEndTime(series.size()-1), zoneLow);
+                        box.setFillColor(Color.RED.darker().darker().darker());
+                        box.setLineColor(Color.RED.darker().darker().darker());
+
+                        reofferZones.add(box);
+                        addFigure(Plot.PRICE, box);
+                        drawReoffer = false;
+                    }
+
+
                     lastPivotLow = series.getLow(pivotBar);
 
                     pivot = high;
@@ -157,13 +167,13 @@ public class RetraceZones extends Study
                 }
             }
             else {
-                if (drawRebid && series.getHigh(i) > lastPivotHigh)  {
+                if (method.equals(METHOD_2) && drawRebid && series.getHigh(i) > lastPivotHigh)  {
                     debug("HIGH > PIVOT");
                     // calculate rebid zone
                     double zoneHigh = series.getHigh(i)- ((series.getHigh(i) - lastPivotLow) * 0.618);
                     double zoneLow = series.getHigh(i) - ((series.getHigh(i) - lastPivotLow) * 0.382); //0.5);
-                    debug("lastPivotHigh: " + lastPivotHigh);
-                    debug("lastPivotLow: " + lastPivotLow);
+//                    debug("lastPivotHigh: " + lastPivotHigh);
+//                    debug("lastPivotLow: " + lastPivotLow);
                     debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh);
                     Box box = new Box(series.getStartTime(i), zoneLow, series.getEndTime(series.size()-1), zoneHigh);
 
@@ -173,22 +183,29 @@ public class RetraceZones extends Study
                     rebidZones.add(box);
                     addFigure(Plot.PRICE, box);
 
-//                    Marker arrow = new Marker(new Coordinate(series.getStartTime(pivotBar), series.getHigh(pivotBar) + 2), Enums.MarkerType.CIRCLE);
-//                    arrow.setSize(Enums.Size.LARGE);
-//                    arrow.setOutlineColor(Color.GREEN);
-//                    arrow.setFillColor(Color.GREEN);
-//                    addFigure(Plot.PRICE, arrow);
                     drawRebid = false;
                 }
                 if (useTicks ? pivot - low >= tickAmount : (1.0+reversal)*low <= pivot) {
                     // confirmed previous max
                     points.add(new Coordinate(series.getStartTime(pivotBar), series.getHigh(pivotBar)));
-//                    Marker arrow = new Marker(new Coordinate(series.getStartTime(pivotBar), series.getHigh(pivotBar) + 2), Enums.MarkerType.CIRCLE);
-//                    arrow.setSize(Enums.Size.LARGE);
-//                    arrow.setFillColor(Color.RED);
-//                    addFigure(Plot.PRICE, arrow);
+
+                    if (method.equals(METHOD_1)) {
+                        double zoneHigh = lastPivotHigh - ((lastPivotHigh - lastPivotLow) * 0.70);
+                        double zoneLow = lastPivotHigh - ((lastPivotHigh - lastPivotLow) * 0.50); //0.5);
+//                        debug("lastPivotHigh: " + lastPivotHigh);
+//                        debug("lastPivotLow: " + lastPivotLow);
+//                        debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh);
+                        Box box = new Box(series.getStartTime(i), zoneLow, series.getEndTime(series.size()-1), zoneHigh);
+
+                        box.setFillColor(Color.BLUE.darker());
+                        box.setLineColor(Color.BLUE.darker());
+
+                        rebidZones.add(box);
+                        addFigure(Plot.PRICE, box);
+                    }
+
                     lastPivotHigh = series.getHigh(pivotBar);
-                    debug("Setting last Pivot High: " + series.getHigh(pivotBar));
+//                    debug("Setting last Pivot High: " + series.getHigh(pivotBar));
                      drawRebid = true;
 
                     pivot = low;
@@ -257,13 +274,13 @@ public class RetraceZones extends Study
                 double l2 = Math.abs(prev2.getValue() - prev.getValue());
                 double rt = l1/l2;
                 l.setText(Util.round(rt*100, 1)+"%", f);
-                addFigure(Plot.PRICE, l);
+//                addFigure(Plot.PRICE, l);
             }
-//            if (priceLabels) {
-//                Label lbl = new Label(instr.format(c.getValue()), f, txtColor, bgColor);
-//                lbl.setLocation(c);
+            if (priceLabels) {
+                Label lbl = new Label(instr.format(c.getValue()), f, txtColor, bgColor);
+                lbl.setLocation(c);
 //                addFigure(lbl);
-//            }
+            }
             prev2 = prev;
             prev = c;
         }
@@ -292,7 +309,7 @@ public class RetraceZones extends Study
                 double rt = l1/l2;
                 l.setText(Util.round(rt*100, 1)+"%", f);
                 unconfirmed.add(l);
-                addFigure(Plot.PRICE, l);
+//                addFigure(Plot.PRICE, l);
             }
 //            if (priceLabels) {
 //                Label lbl = new Label(instr.format(last.getValue()), f, txtColor, bgColor);
@@ -305,25 +322,6 @@ public class RetraceZones extends Study
 
         endFigureUpdate();
     }
-
-//    @Override
-//    public void onBarClose(DataContext ctx) {
-//        debug("BAR CLOSED");
-//        DataSeries series = ctx.getDataSeries();
-//
-//            for (Box box : rebidZones) { //                debug("invalidating: Box Start Value: " + box.getStartValue());
-//                debug("invalidating: series.getLow(i): " + series.getLow(series.size()));
-//                if (series.getLow(series.size()) < box.getStartValue()) {
-//                    debug("removing box at " + box.getStartValue() + " - " + box.getEndValue());
-//                    removeFigure(Plot.PRICE, box);
-//                } else {
-//                    // extend box to current candle
-//                    box.setEnd(series.getEndTime(series.size()-1), box.getEndValue());
-//                }
-//            }
-//
-//
-//    }
 
 
     boolean drawRebid = true; // we need to draw the rebid
