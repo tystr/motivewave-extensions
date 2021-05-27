@@ -97,6 +97,8 @@ public class RetraceZones extends Study
         Color bgColor = defaults.getBackgroundColor();
         Color txtColor = Color.ORANGE; //line.getColor();
         String method = s.getInput(METHOD_INPUT).toString();
+        Color rebidColor = s.getColor(REBID_COLOR);
+        Color reofferColor = s.getColor(REOFFER_COLOR);
         debug("Using method " + method + ".");
 
         var series = ctx.getDataSeries();
@@ -128,8 +130,8 @@ public class RetraceZones extends Study
 //                    debug("lastPivotLow: " + lastPivotLow);
                     debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow);
                     Box box = new Box(series.getStartTime(i), zoneHigh, series.getEndTime(series.size()-1), zoneLow);
-                    box.setFillColor(Color.RED.darker().darker().darker());
-                    box.setLineColor(Color.RED.darker().darker().darker());
+                    box.setFillColor(reofferColor);
+                    box.setLineColor(reofferColor);
 
                     reofferZones.add(box);
                     addFigure(Plot.PRICE, box);
@@ -145,8 +147,8 @@ public class RetraceZones extends Study
 //                        debug("lastPivotLow: " + lastPivotLow);
 //                        debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow);
                         Box box = new Box(series.getStartTime(i), zoneHigh, series.getEndTime(series.size()-1), zoneLow);
-                        box.setFillColor(Color.RED.darker().darker().darker());
-                        box.setLineColor(Color.RED.darker().darker().darker());
+                        box.setFillColor(reofferColor);
+                        box.setLineColor(reofferColor);
 
                         reofferZones.add(box);
                         addFigure(Plot.PRICE, box);
@@ -177,8 +179,8 @@ public class RetraceZones extends Study
                     debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh);
                     Box box = new Box(series.getStartTime(i), zoneLow, series.getEndTime(series.size()-1), zoneHigh);
 
-                    box.setFillColor(Color.BLUE.darker());
-                    box.setLineColor(Color.BLUE.darker());
+                    box.setFillColor(rebidColor);
+                    box.setLineColor(rebidColor);
 
                     rebidZones.add(box);
                     addFigure(Plot.PRICE, box);
@@ -197,8 +199,8 @@ public class RetraceZones extends Study
 //                        debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh);
                         Box box = new Box(series.getStartTime(i), zoneLow, series.getEndTime(series.size()-1), zoneHigh);
 
-                        box.setFillColor(Color.BLUE.darker());
-                        box.setLineColor(Color.BLUE.darker());
+                        box.setFillColor(rebidColor);
+                        box.setLineColor(rebidColor);
 
                         rebidZones.add(box);
                         addFigure(Plot.PRICE, box);
