@@ -29,7 +29,8 @@ import com.motivewave.platform.sdk.study.StudyHeader;
         desc="Plots retrace zones",
         menu="Menu overly",
         overlay=true,
-        studyOverlay=true,
+        studyOverlay=false,
+        underlayByDefault = true,
         supportsBarUpdates=false
         // helpLink="http://www.motivewave.com/studies/zig_zag.htm"
         )
@@ -124,7 +125,7 @@ public class RetraceZones extends Study
                 if (drawReoffer && series.getLow(i) < lastPivotLow) {
                     debug("LOW < PIVOT");
                     double zoneHigh = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.618);
-                    double zoneLow = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.5);
+                    double zoneLow = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.382);//0.5);
                     debug("lastPivotHigh: " + lastPivotHigh);
                     debug("lastPivotLow: " + lastPivotLow);
                     debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow);
@@ -160,11 +161,12 @@ public class RetraceZones extends Study
                     debug("HIGH > PIVOT");
                     // calculate rebid zone
                     double zoneHigh = series.getHigh(i)- ((series.getHigh(i) - lastPivotLow) * 0.618);
-                    double zoneLow = series.getHigh(i) - ((series.getHigh(i) - lastPivotLow) * 0.5);
+                    double zoneLow = series.getHigh(i) - ((series.getHigh(i) - lastPivotLow) * 0.382); //0.5);
                     debug("lastPivotHigh: " + lastPivotHigh);
                     debug("lastPivotLow: " + lastPivotLow);
                     debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh);
                     Box box = new Box(series.getStartTime(i), zoneLow, series.getEndTime(series.size()-1), zoneHigh);
+
                     box.setFillColor(Color.BLUE.darker());
                     box.setLineColor(Color.BLUE.darker());
 
@@ -203,7 +205,7 @@ public class RetraceZones extends Study
             // remove invalidated zones
 
             for (Box box : rebidZones) {
-                if (series.getLow(i) < box.getStartValue()) {
+                if (series.getClose(i) < box.getEndValue()) {
 //                    debug("invalidating Rebid Zone: Box Start Value: " + box.getStartValue());
 //                    debug("invalidating Rebid Zone: series.getLow(i): " + series.getLow(i));
 //                    debug("removing rebid zone at " + box.getStartValue() + " - " + box.getEndValue());
@@ -214,7 +216,7 @@ public class RetraceZones extends Study
                 }
             }
             for (Box box : reofferZones) {
-                if (series.getHigh(i) > box.getStartValue()) {
+                if (series.getClose(i) > box.getStartValue()) {
 //                    debug("invalidating Reoffer Zone: Box Start Value: " + box.getStartValue());
 //                    debug("invalidating Reoffer Zone: series.getLow(i): " + series.getLow(i));
 //                    debug("removing reoffer zone at " + box.getStartValue() + " - " + box.getEndValue());
@@ -257,11 +259,11 @@ public class RetraceZones extends Study
                 l.setText(Util.round(rt*100, 1)+"%", f);
                 addFigure(Plot.PRICE, l);
             }
-            if (priceLabels) {
-                Label lbl = new Label(instr.format(c.getValue()), f, txtColor, bgColor);
-                lbl.setLocation(c);
-                addFigure(lbl);
-            }
+//            if (priceLabels) {
+//                Label lbl = new Label(instr.format(c.getValue()), f, txtColor, bgColor);
+//                lbl.setLocation(c);
+//                addFigure(lbl);
+//            }
             prev2 = prev;
             prev = c;
         }
@@ -292,12 +294,12 @@ public class RetraceZones extends Study
                 unconfirmed.add(l);
                 addFigure(Plot.PRICE, l);
             }
-            if (priceLabels) {
-                Label lbl = new Label(instr.format(last.getValue()), f, txtColor, bgColor);
-                lbl.setLocation(last);
-                unconfirmed.add(lbl);
-                addFigure(lbl);
-            }
+//            if (priceLabels) {
+//                Label lbl = new Label(instr.format(last.getValue()), f, txtColor, bgColor);
+//                lbl.setLocation(last);
+//                unconfirmed.add(lbl);
+//                addFigure(lbl);
+//            }
             removeFigures(tmp);
         }
 
