@@ -10,6 +10,7 @@ import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.draw.*;
 import com.motivewave.platform.sdk.draw.Label;
+import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.StudyHeader;
 
 /**
@@ -36,13 +37,19 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
     private Map<Integer, Integer> deltas;
     private Map<Integer, Integer> rthDeltas;
     private Map<Integer, DeltaBar> deltaBars;
+    private Map<Integer, Integer> rollingWindowDeltas; // index, delta
+
     private long rthOpen; // previous RTH Open Timestamp
     private long rthClose; // previous RTH Close Timestamp
     private long londonOpen;
     private long londonClose;
 
+    // don't do this - used to reset bar colors for developing delta
+    private Defaults defaults;
+
     @Override
     public void initialize(Defaults defaults) {
+        this.defaults = defaults;
         clearFigures();
         clearState();
         var sd = createSD();
@@ -72,6 +79,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         deltas = new HashMap<Integer, Integer>();
         rthDeltas = new HashMap<Integer, Integer>();
         deltaBars = new HashMap<>();
+        rollingWindowDeltas = new HashMap<>();
     }
 
     private LocalDateTime getLondonOpen() {
@@ -113,6 +121,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             debug("SessionDeltaPivot: Delta " + sdp.getDelta());
             debug("SessionDeltaPivot: Delta POC " + sdp.getDeltaPoc());
             debug("SessionDeltaPivot: DataSeries Bar Index " + sdp.getBarIndex());
+            clearFigures();
             addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
         } else {
             debug("DataSeries size is 0, skipping SDP calculation");
@@ -162,13 +171,23 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         int maxDelta = 0;
         int maxDeltaIndex = 0;
         DeltaBar deltaBar;
+
+        // track consecutive bar max delta
+        int maxRollingWindowDeltaSum = 0;
+        int maxRollingDeltaWindowDeltaStartIndex = 0;
+        int numBars = 5; // @todo make this configurable - the number of bars over which to calculate the rolling window
+
         if (series.size() < 10) throw new RuntimeException();
+        int startIndex = -1;
         for (int i = 1; i < series.size(); i++) {
             if (!series.isBarComplete(i)) continue;
-            if (series.getStartTime(i) < sessionStart)
+            if (series.getStartTime(i) < sessionStart) {
                 // todo if we're goin to calculate multiple sessions, need to instead see if series index is within
                 // session's relative open/close time instead of using an absolute datetime for open/close
                 continue; // ignore if bar is before session open
+            } else {
+                if (startIndex == -1) startIndex = i;
+            }
             if (series.getEndTime(i) > sessionEnd)
                 continue; // ignore if bar is after session close
 
@@ -189,6 +208,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 debug("Found delta "  + deltaBars.get(i).getDelta() + " for index " + i);
             }
 
+            // update min/max delta
             int delta = deltaBars.get(i).getDelta();
             if (delta < 0 && delta < minDelta) {
                 minDelta = delta;
@@ -197,6 +217,36 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 maxDelta = delta;
                 maxDeltaIndex = i;
             }
+
+            debug("startIndex: " + startIndex);
+
+            series.setPriceBarColor(i, defaults.getBarColor());
+            if (i > startIndex + numBars) {
+                debug("Calculating rolling window delta sum");
+                int rollingWindowDeltaSum = 0;
+                int rollingWindowStart = i - numBars;
+                // calculate sum for rolling numBars window
+                for (int j = i; j >= rollingWindowStart; j--) {
+                    debug("Getting Delta for index " + j);
+                    rollingWindowDeltaSum += Math.abs(deltaBars.get(j).getDelta());
+                }
+                if (rollingWindowDeltaSum > maxRollingWindowDeltaSum) {
+                    maxRollingWindowDeltaSum = rollingWindowDeltaSum;
+                    maxRollingDeltaWindowDeltaStartIndex = rollingWindowStart;
+                }
+                rollingWindowDeltas.put(rollingWindowStart, rollingWindowDeltaSum);
+                debug("Calculated rollingWindowDeltaSum: " + rollingWindowDeltaSum);
+            }
+        }
+        debug("Calculated MAX rollingWindowDeltaSum: " + maxRollingWindowDeltaSum  + " starting at index " + maxRollingDeltaWindowDeltaStartIndex);
+
+        // highlight rolling window max delta bars
+        for (int i = maxRollingDeltaWindowDeltaStartIndex; i < maxRollingDeltaWindowDeltaStartIndex + numBars; i++) {
+            Marker arrow = new Marker(new Coordinate(series.getStartTime(i), series.getClose(i) - 6), Enums.MarkerType.ARROW);
+            arrow.setSize(Enums.Size.MEDIUM);
+            arrow.setFillColor(Color.ORANGE);
+            addFigure(Plot.PRICE, arrow);
+            series.setPriceBarColor(i, Color.GREEN);
         }
 //        debug("MAX POSITIVE DELTA BAR INDEX: " + maxDeltaIndex);
 //        debug("MAX POSITIVE DELTA: " + maxDelta);
