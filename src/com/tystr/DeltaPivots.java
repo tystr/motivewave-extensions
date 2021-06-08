@@ -62,6 +62,16 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", Color.RED, 1.0f, null, true, false, false));
         grp.addRow(new InputDescriptor("SessionInput", "Session", new String[]{SESSION_RTH, SESSION_JPY, SESSION_LONDON}, SESSION_RTH));
 
+        grp.addRow(new BooleanDescriptor("ShowDevelopingLines", "Show Lines for Developing SDP", false));
+
+        grp.addRow(new BooleanDescriptor("ShowDeveloping", "Show Developing", true));
+        grp.addRow(new BooleanDescriptor("SmoothingEnabled", "Enable Smoothing", false));
+        grp.addRow(new IntegerDescriptor("SmoothingBars", "Bars to Smooth", 5, 1, 20, 1));
+
+        sd.addDependency(new EnabledDependency("SmoothingEnabled", "SmoothingBars"));
+
+        sd.addQuickSettings("SessionInput");
+
         LocalTime rthOpenTime = LocalTime.of(9, 30);
         LocalDateTime rthOpenDateTime = LocalDateTime.of(LocalDate.now(), rthOpenTime);
         LocalDateTime now = LocalDateTime.now();
@@ -96,7 +106,9 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
     }
 
     private LocalDateTime getRthOpenLocalDateTime() {
-        LocalTime rthOpenTime = LocalTime.of(9, 30);
+        // RTH OFFSET - only look at afternoon hours
+        long offset = 4;
+        LocalTime rthOpenTime = LocalTime.of(9, 30).plusHours(offset);
         LocalDateTime rthOpenDateTime = LocalDateTime.of(LocalDate.now(), rthOpenTime);
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(rthOpenDateTime)) rthOpenDateTime = rthOpenDateTime.minusDays(1);
@@ -116,6 +128,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 //        );
         DataSeries series = ctx.getDataSeries();
 
+        Instrument instrument = series.getInstrument();
+
         if (series.size() != 0) {
             debug("DataSeries size is " + series.size());
             SessionDeltaPivot sdp = calculateDeltasForSession(ctx, series, session);
@@ -128,7 +142,14 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             debug("SessionDeltaPivot: Delta POC " + sdp.getDeltaPoc());
             debug("SessionDeltaPivot: DataSeries Bar Index " + sdp.getBarIndex());
             clearFigures();
-            addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
+
+            boolean showLines = getSettings().getBoolean("ShowDevelopingLines");
+            // if current session only show lines if enab led
+            if (instrument.isInsideTradingHours(LocalDateTime.now().toEpochSecond(ZoneOffset.ofHours(-4)), true) && showLines) {
+                addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
+            } else if (!instrument.isInsideTradingHours(LocalDateTime.now().toEpochSecond(ZoneOffset.ofHours(-4)), true)) {
+                addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
+            }
         } else {
             debug("DataSeries size is 0, skipping SDP calculation");
         }
@@ -181,7 +202,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         // track consecutive bar max delta
         int maxRollingWindowDeltaSum = 0;
         int maxRollingDeltaWindowDeltaStartIndex = 0;
-        int numBars = 5; // @todo make this configurable - the number of bars over which to calculate the rolling window
+        int numBars = getSettings().getInteger("SmoothingBars", 1);
 
         if (series.size() < 10) throw new RuntimeException();
         int startIndex = -1;
@@ -226,8 +247,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
             debug("startIndex: " + startIndex);
 
-            series.setPriceBarColor(i, defaults.getBarColor());
-            if (i > startIndex + numBars) {
+            series.setPriceBarColor(i, series.getOpen(i) < series.getClose(i) ? defaults.getBarUpColor() : defaults.getBarDownColor());
+            if (getSettings().getBoolean("ShowDeveloping", false) && i > startIndex + numBars) {
                 debug("Calculating rolling window delta sum");
                 int rollingWindowDeltaSum = 0;
                 int rollingWindowStart = i - numBars;
@@ -247,11 +268,11 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         debug("Calculated MAX rollingWindowDeltaSum: " + maxRollingWindowDeltaSum  + " starting at index " + maxRollingDeltaWindowDeltaStartIndex);
 
         // highlight rolling window max delta bars
+        float rollingWindowHigh = Float.NEGATIVE_INFINITY;
+        float rollingWindowLow = Float.POSITIVE_INFINITY;
         for (int i = maxRollingDeltaWindowDeltaStartIndex; i < maxRollingDeltaWindowDeltaStartIndex + numBars; i++) {
-            Marker arrow = new Marker(new Coordinate(series.getStartTime(i), series.getClose(i) - 6), Enums.MarkerType.ARROW);
-            arrow.setSize(Enums.Size.MEDIUM);
-            arrow.setFillColor(Color.ORANGE);
-            addFigure(Plot.PRICE, arrow);
+            if (series.getHigh(i) > rollingWindowHigh) rollingWindowHigh = series.getHigh(i);
+            if (series.getLow(i) < rollingWindowLow) rollingWindowLow = series.getLow(i);
             series.setPriceBarColor(i, Color.GREEN);
         }
 //        debug("MAX POSITIVE DELTA BAR INDEX: " + maxDeltaIndex);
@@ -260,6 +281,19 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 //        debug("MAX NEGATIVE DELTA: " + minDelta);
 
         int sdpIndex = Math.abs(maxDelta) > Math.abs(minDelta) ? maxDeltaIndex : minDeltaIndex;
+        if (getSettings().getBoolean("SmoothingEnabled")) {
+
+            return new SessionDeltaPivot(
+                    deltaBars.get(sdpIndex),
+                    maxRollingDeltaWindowDeltaStartIndex,
+                    rollingWindowHigh,
+                    rollingWindowLow,
+                    session,
+                    series.getStartTime(maxRollingDeltaWindowDeltaStartIndex),
+                    false
+            );
+
+        }
 
         return new SessionDeltaPivot(
                 deltaBars.get(sdpIndex),
@@ -268,7 +302,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 series.getLow(sdpIndex),
                 session,
                 series.getStartTime(sdpIndex),
-                true
+                false
         );
     }
 
@@ -463,8 +497,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          * @return
          */
         public float getPivot() {
-            return deltaPoc;
-//            return this.pivot;
+//            return deltaPoc;
+            return this.pivot;
         }
 
         public float getHigh() {
