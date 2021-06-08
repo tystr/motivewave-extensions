@@ -8,8 +8,13 @@ import com.motivewave.platform.sdk.common.desc.ValueDescriptor;
 import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
+import com.tystr.DeltaPivots;
 
 import java.awt.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /** This simple example displays a exponential moving average. */
 @StudyHeader(
@@ -24,7 +29,7 @@ import java.awt.*;
  studyOverlay=true)
 public class MyMovingAverage extends Study
 {
-  enum Values { MA };
+  enum Values { MA, DELTA_POC, DELTA_POC_MA };
   
   /** This method initializes the study by doing the following:
       1. Define Settings (Design Time Information)
@@ -62,11 +67,14 @@ public class MyMovingAverage extends Study
     // generate alerts or scan for study patterns (see study scanner).
     desc.exportValue(new ValueDescriptor(Values.MA, get("My MA"), 
                      new String[] {Inputs.INPUT, Inputs.PERIOD}));
+    desc.exportValue(new ValueDescriptor(Values.DELTA_POC, get("Delta POC"),
+            new String[] {Inputs.INPUT, Inputs.PERIOD}));
     // MotiveWave will automatically draw a path using the path settings
-    // (described above with the key 'Inputs.LINE')  In this case 
+    // (described above with the key 'Inputs.LINE')  In this case
     // it will use the values generated in the 'calculate' method
     // and stored in the data series using the key 'Values.MA'
     desc.declarePath(Values.MA, Inputs.PATH);
+//    desc.declarePath(Values.DELTA_POC, Inputs.PATH);
 
     desc.declareIndicator(4284, "testing");
   }
@@ -103,8 +111,8 @@ public class MyMovingAverage extends Study
     Double average2 = series.sma(index, period, input);
     if (average1 == null || average2 == null) return;
     
-    double ma = average1;
-    ma = (average1 + average2)/2;
+//    double ma = average1;
+//    ma = (average1 + average2)/2;
     
     // Calculated values are stored in the data series using
     // a key (Values.MA).  The key can be any unique value, but
@@ -112,6 +120,58 @@ public class MyMovingAverage extends Study
     // your class.  Notice that in the initialize method we declared
     // a path using this key.
     //debug("Setting MA value for index: " + index + " average: " + ma);
-    series.setDouble(index, Values.MA, ma); 
+//    series.setDouble(index, Values.MA, ma);
+
+    // Calculate Deltas for bar
+    DeltaBar deltaBar = getDeltaForTicksAsDeltaBar(
+            series.getInstrument().getTicks(series.getStartTime(index), series.getEndTime(index))
+    );
+    series.setFloat(index, Values.DELTA_POC, deltaBar.getDeltaPOC());
+
+    Double ma = series.ma(Enums.MAMethod.SMA, index, period, Values.DELTA_POC);
+    if (ma == null) return;
+    debug("setting delta poc ma " + ma + " for index " + index);
+    series.setDouble(index, Values.MA, ma);
+  }
+
+
+  private static class DeltaBar {
+    private final Map<Float, Integer> deltasByPrice;
+    private final int delta;
+
+    public DeltaBar(Map<Float, Integer> deltasByPrice) {
+      this.deltasByPrice = deltasByPrice;
+      this.delta = calcDelta();
+    }
+
+    public Map<Float, Integer> getDeltasByPrice() {
+      return deltasByPrice;
+    }
+    public int getDelta() {
+      return delta;
+    }
+    public float getDeltaPOC() {
+      return Collections.max(deltasByPrice.entrySet(), Map.Entry.comparingByValue()).getKey();
+    }
+    private int calcDelta() {
+      return deltasByPrice.values().stream().mapToInt(Integer::valueOf).sum();
+    }
+  }
+
+  protected DeltaBar getDeltaForTicksAsDeltaBar(List<Tick> ticks) {
+    Map<Float, Integer> deltasByPrice = new HashMap<Float, Integer>();
+    for (Tick tick : ticks) {
+      if (tick.isAskTick()) {
+        int deltaAtPrice = deltasByPrice.getOrDefault(tick.getAskPrice(), 0);
+        deltaAtPrice += tick.getVolume();
+        deltasByPrice.put(tick.getAskPrice(), deltaAtPrice);
+      } else {
+        int deltaAtPrice = deltasByPrice.getOrDefault(tick.getBidPrice(), 0);
+        deltaAtPrice -= tick.getVolume();
+        deltasByPrice.put(tick.getBidPrice(), deltaAtPrice);
+      }
+    }
+
+    return new DeltaBar(deltasByPrice);
   }
 }

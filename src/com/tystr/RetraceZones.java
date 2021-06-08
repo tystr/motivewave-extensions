@@ -58,7 +58,7 @@ public class RetraceZones extends Study
         // Quick Settings (Tool Bar and Popup Editor)
         //sd.addQuickSettings(HIGH_INPUT, LOW_INPUT, REVERSAL_TICKS, USE_TICKS, REVERSAL, PRICE_MOVEMENTS, PRICE_LABELS, Inputs.FONT, Inputs.PATH, RETRACE_LINE);
         sd.addQuickSettings(REBID_COLOR, REOFFER_COLOR, REVERSAL_TICKS, METHOD_INPUT);
-        sd.rowAlign(REBID_COLOR, REOFFER_COLOR, REVERSAL_TICKS);
+        //sd.rowAlign(REBID_COLOR, REOFFER_COLOR, REVERSAL_TICKS);
 
         sd.addDependency(new EnabledDependency(USE_TICKS, REVERSAL_TICKS));
         sd.addDependency(new EnabledDependency(false, USE_TICKS, REVERSAL));
@@ -88,7 +88,8 @@ public class RetraceZones extends Study
         int reversalTicks = s.getInteger(REVERSAL_TICKS, 10);
         boolean useTicks = s.getBoolean(USE_TICKS, false);
         boolean movements = s.getBoolean(PRICE_MOVEMENTS, true);
-        boolean priceLabels = s.getBoolean(PRICE_LABELS, true);
+        boolean priceLabels = s.getBoolean(PRICE_LABELS, false);
+//        boolean priceLabels = s.getBoolean(PRICE_LABELS, true);
         var line = s.getPath(Inputs.PATH);
         var retraceLine = s.getPath(RETRACE_LINE);
         var defaults = ctx.getDefaults();
@@ -122,16 +123,20 @@ public class RetraceZones extends Study
             double high = series.getDouble(i, highInput);
             double low = series.getDouble(i, lowInput);
             if (up) {
-                if (method == METHOD_2 && drawReoffer && series.getLow(i) < lastPivotLow) {
-                    debug("LOW < PIVOT");
-                    double zoneHigh = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.618);
-                    double zoneLow = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.382);//0.5);
+                if (method.equals(METHOD_2) && drawReoffer && series.getLow(i) < lastPivotLow) {
+                    // Method 2 Peak to Breaking candle
+//                    debug("LOW < PIVOT");
+                    double zoneHigh = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.70); //0.618);
+                    double zoneLow = series.getLow(i) + ((lastPivotHigh - series.getLow(i)) * 0.50); //0.382);//0.5);
 //                    debug("lastPivotHigh: " + lastPivotHigh);
 //                    debug("lastPivotLow: " + lastPivotLow);
-                    debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow);
+                    debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow +", calculated using swing high of " + lastPivotHigh + " and swing low of " + lastPivotLow);
                     Box box = new Box(series.getStartTime(i), zoneHigh, series.getEndTime(series.size()-1), zoneLow);
                     box.setFillColor(reofferColor);
                     box.setLineColor(reofferColor);
+
+//                    Label label = new Label(new Coordinate(series.getStartTime(i), zoneHigh+4), "LastPivotHigh: " + lastPivotHigh + ", lastPivotLow " + lastPivotLow);
+//                    addFigure(Plot.PRICE, label);
 
                     reofferZones.add(box);
                     addFigure(Plot.PRICE, box);
@@ -140,15 +145,19 @@ public class RetraceZones extends Study
                 if (useTicks ? high - pivot >= tickAmount : (1.0-reversal)*high >= pivot) {
                     // confirmed previous low
                     points.add(new Coordinate(series.getStartTime(pivotBar), series.getLow(pivotBar)));
-                    if (method == METHOD_1) {
-                        double zoneHigh = lastPivotLow + ((lastPivotHigh - lastPivotLow) * 0.618);
-                        double zoneLow = series.getLow(i) + ((lastPivotHigh - lastPivotLow) * 0.382);//0.5);
+                    if (method.equals(METHOD_1)) {
+                         // Method 1 Peak to Peak
+                        lastPivotLow = series.getLow(pivotBar);
+                        double zoneHigh = lastPivotLow + ((lastPivotHigh - lastPivotLow) * 0.70); //0.618);
+                        double zoneLow = lastPivotLow + ((lastPivotHigh - lastPivotLow) * 0.50); //0.382);//0.5);
 //                        debug("lastPivotHigh: " + lastPivotHigh);
 //                        debug("lastPivotLow: " + lastPivotLow);
-//                        debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow);
+                        debug("Drawing reoffer zone from " + zoneHigh + " to " + zoneLow+", calculated using swing high of " + lastPivotHigh + " and swing low of " + lastPivotLow);
                         Box box = new Box(series.getStartTime(i), zoneHigh, series.getEndTime(series.size()-1), zoneLow);
                         box.setFillColor(reofferColor);
                         box.setLineColor(reofferColor);
+//                        Label label = new Label(new Coordinate(series.getStartTime(i), zoneHigh+4), "LastPivotHigh: " + lastPivotHigh + ", lastPivotLow " + lastPivotLow);
+//                        addFigure(Plot.PRICE, label);
 
                         reofferZones.add(box);
                         addFigure(Plot.PRICE, box);
@@ -156,7 +165,6 @@ public class RetraceZones extends Study
                     }
 
 
-                    lastPivotLow = series.getLow(pivotBar);
 
                     pivot = high;
                     pivotBar = i;
@@ -170,17 +178,21 @@ public class RetraceZones extends Study
             }
             else {
                 if (method.equals(METHOD_2) && drawRebid && series.getHigh(i) > lastPivotHigh)  {
-                    debug("HIGH > PIVOT");
+                    //debug("HIGH > PIVOT");
                     // calculate rebid zone
-                    double zoneHigh = series.getHigh(i)- ((series.getHigh(i) - lastPivotLow) * 0.618);
-                    double zoneLow = series.getHigh(i) - ((series.getHigh(i) - lastPivotLow) * 0.382); //0.5);
+                    double zoneHigh = series.getHigh(i)- ((series.getHigh(i) - lastPivotLow) * 0.70); //0.618);
+                    double zoneLow = series.getHigh(i) - ((series.getHigh(i) - lastPivotLow) * 0.50); //0.382); //0.5);
 //                    debug("lastPivotHigh: " + lastPivotHigh);
 //                    debug("lastPivotLow: " + lastPivotLow);
-                    debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh);
+                    debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh + ", calculated using swing high of " + lastPivotHigh + " and swing low of " + lastPivotLow);
                     Box box = new Box(series.getStartTime(i), zoneLow, series.getEndTime(series.size()-1), zoneHigh);
 
                     box.setFillColor(rebidColor);
                     box.setLineColor(rebidColor);
+//
+//                    Label label = new Label(new Coordinate(series.getStartTime(i), zoneHigh+4), "LastPivotHigh: " + lastPivotHigh + ", lastPivotLow " + lastPivotLow);
+//                    addFigure(Plot.PRICE, label);
+
 
                     rebidZones.add(box);
                     addFigure(Plot.PRICE, box);
@@ -192,12 +204,16 @@ public class RetraceZones extends Study
                     points.add(new Coordinate(series.getStartTime(pivotBar), series.getHigh(pivotBar)));
 
                     if (method.equals(METHOD_1)) {
+                        lastPivotHigh = series.getHigh(pivotBar);
                         double zoneHigh = lastPivotHigh - ((lastPivotHigh - lastPivotLow) * 0.70);
                         double zoneLow = lastPivotHigh - ((lastPivotHigh - lastPivotLow) * 0.50); //0.5);
 //                        debug("lastPivotHigh: " + lastPivotHigh);
 //                        debug("lastPivotLow: " + lastPivotLow);
-//                        debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh);
+                        debug("Drawing rebid zone from " + zoneLow + " to " + zoneHigh + ", calculated using swing high of " + lastPivotHigh + " and swing low of " + lastPivotLow);
                         Box box = new Box(series.getStartTime(i), zoneLow, series.getEndTime(series.size()-1), zoneHigh);
+
+//                        Label label = new Label(new Coordinate(series.getStartTime(i), zoneHigh+4), "LastPivotHigh: " + lastPivotHigh + ", lastPivotLow " + lastPivotLow);
+//                        addFigure(Plot.PRICE, label);
 
                         box.setFillColor(rebidColor);
                         box.setLineColor(rebidColor);
@@ -206,7 +222,6 @@ public class RetraceZones extends Study
                         addFigure(Plot.PRICE, box);
                     }
 
-                    lastPivotHigh = series.getHigh(pivotBar);
 //                    debug("Setting last Pivot High: " + series.getHigh(pivotBar));
                      drawRebid = true;
 
@@ -247,8 +262,6 @@ public class RetraceZones extends Study
             }
         }
 
-
-
         // Build the ZigZag lines
         // For efficiency reasons, only build the delta
         beginFigureUpdate();
@@ -281,7 +294,7 @@ public class RetraceZones extends Study
             if (priceLabels) {
                 Label lbl = new Label(instr.format(c.getValue()), f, txtColor, bgColor);
                 lbl.setLocation(c);
-//                addFigure(lbl);
+                addFigure(lbl);
             }
             prev2 = prev;
             prev = c;
@@ -325,6 +338,33 @@ public class RetraceZones extends Study
         endFigureUpdate();
     }
 
+    private static class Zone {
+        private final double high;
+        private final double low;
+        private final Color color;
+        public Zone(double high, double low, Color color) {
+            if (high <= low) throw new IllegalArgumentException("high must be greater than low");
+            this.high = high;
+            this.low = low;
+            this.color = color;
+        }
+        public double getHigh() {
+            return high;
+        }
+        public double getLow() {
+            return low;
+        }
+        public Color getColor() {
+            return color;
+        }
+
+        public Box createBox(long startTime, long endTime) {
+            Box box = new Box(startTime, low, endTime, high);
+            box.setFillColor(color);
+            box.setLineColor(color);
+            return box;
+        }
+    }
 
     boolean drawRebid = true; // we need to draw the rebid
     boolean drawReoffer = true;

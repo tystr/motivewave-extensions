@@ -2,10 +2,9 @@ package com.tystr;
 
 import java.awt.*;
 import java.time.*;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
+
 import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.draw.*;
@@ -24,7 +23,9 @@ import com.motivewave.platform.sdk.study.StudyHeader;
                 + "",
         name = "Session Delta Pivots",
         desc = "This study plots delta pivots for a given session. See https://www.onlyticks.com/blog-orderflowleo/session-delta-pivots",
-        overlay = true
+        overlay = true,
+        requiresVolume = true,
+        allowTickAggregate = true
 )
 public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
     final static String SESSION_RTH = "RTH";
@@ -109,9 +110,14 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
     @Override
     protected void calculateValues(DataContext ctx) {
         String session = getSettings().getInput("SessionInput").toString();
-        DataSeries series = ctx.getDataSeries(BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000));
+//        BarSize barSize = BarSize.getBarSize(
+//                Enums.BarSizeType.CONSTANT_VOLUME,
+//                1000
+//        );
+        DataSeries series = ctx.getDataSeries();
 
         if (series.size() != 0) {
+            debug("DataSeries size is " + series.size());
             SessionDeltaPivot sdp = calculateDeltasForSession(ctx, series, session);
             debug("SessionDeltaPivot: Session " + sdp.getSession());
             debug("SessionDeltaPivot: Pivot" + sdp.getPivot());
