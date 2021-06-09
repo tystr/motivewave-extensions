@@ -32,15 +32,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY
     };
 
-    private Map<Integer, Integer> deltas;
-    private Map<Integer, Integer> rthDeltas;
-    private Map<Integer, DeltaBar> deltaBars;
-    private Map<Integer, Integer> rollingWindowDeltas; // index, delta
-
-    private long rthOpen; // previous RTH Open Timestamp
-    private long rthClose; // previous RTH Close Timestamp
-    private long londonOpen;
-    private long londonClose;
+    private Map<Integer, DeltaBar> deltaBars; // Cache the delta calculations
 
     // don't do this - used to reset bar colors for developing delta
     private Defaults defaults;
@@ -74,16 +66,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(rthOpenDateTime)) rthOpenDateTime = rthOpenDateTime.minusDays(1);
 
-        // These timestamps will be used to determine which dataseries bars are used to calculate the delta pivots
-        rthOpen = rthOpenDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-        rthClose = rthOpenDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000;
-        londonOpen = getLondonOpen().toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT;
-        londonClose = getLondonOpen().plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-
-        deltas = new HashMap<Integer, Integer>();
-        rthDeltas = new HashMap<Integer, Integer>();
         deltaBars = new HashMap<>();
-        rollingWindowDeltas = new HashMap<>();
     }
 
     private LocalDateTime getLondonOpen() {
@@ -243,7 +226,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                     maxRollingWindowDeltaSum = rollingWindowDeltaSum;
                     maxRollingDeltaWindowDeltaStartIndex = rollingWindowStart;
                 }
-                rollingWindowDeltas.put(rollingWindowStart, rollingWindowDeltaSum);
                 debug("Calculated rollingWindowDeltaSum: " + rollingWindowDeltaSum);
             }
         }
@@ -257,10 +239,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             if (series.getLow(i) < rollingWindowLow) rollingWindowLow = series.getLow(i);
             series.setPriceBarColor(i, Color.GREEN);
         }
-//        debug("MAX POSITIVE DELTA BAR INDEX: " + maxDeltaIndex);
-//        debug("MAX POSITIVE DELTA: " + maxDelta);
-//        debug("MAX NEGATIVE DELTA BAR INDEX: " + minDeltaIndex);
-//        debug("MAX NEGATIVE DELTA: " + minDelta);
 
         int sdpIndex = Math.abs(maxDelta) > Math.abs(minDelta) ? maxDeltaIndex : minDeltaIndex;
         if (getSettings().getBoolean("SmoothingEnabled")) {
