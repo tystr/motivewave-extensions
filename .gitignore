@@ -1,2 +1,3 @@
 dev
-build
+build/classes
+.last_update
