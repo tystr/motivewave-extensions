@@ -64,7 +64,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
         grp.addRow(new BooleanDescriptor("ShowDevelopingLines", "Show Lines for Developing SDP", false));
 
-        grp.addRow(new BooleanDescriptor("ShowDeveloping", "Show Developing", true));
+        grp.addRow(new BooleanDescriptor("ShowDeveloping", "Highlight Bars", true));
         grp.addRow(new BooleanDescriptor("SmoothingEnabled", "Enable Smoothing", false));
         grp.addRow(new IntegerDescriptor("SmoothingBars", "Bars to Smooth", 5, 1, 20, 1));
 
@@ -293,6 +293,11 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                     false
             );
 
+        }
+
+        // Color SDP bar
+        if (getSettings().getBoolean("ShowDeveloping", false)) {
+            series.setPriceBarColor(sdpIndex, Color.GREEN);
         }
 
         return new SessionDeltaPivot(
