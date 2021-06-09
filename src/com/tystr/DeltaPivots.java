@@ -8,8 +8,6 @@ import java.util.List;
 import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.draw.*;
-import com.motivewave.platform.sdk.draw.Label;
-import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.StudyHeader;
 
 /**
@@ -19,8 +17,7 @@ import com.motivewave.platform.sdk.study.StudyHeader;
  */
 @StudyHeader(
         namespace = "com.tystr",
-        id = "DELTA_PIVOTS"
-                + "",
+        id = "DELTA_PIVOTS",
         name = "Session Delta Pivots",
         desc = "This study plots delta pivots for a given session. See https://www.onlyticks.com/blog-orderflowleo/session-delta-pivots",
         overlay = true,
@@ -82,10 +79,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         rthClose = rthOpenDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000;
         londonOpen = getLondonOpen().toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT;
         londonClose = getLondonOpen().plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-//        debug("rthOpen: " + rthOpen);
-//        debug("rthClose: " + rthClose);
-//        debug("londonOpen: " + londonOpen);
-//        debug("londonClose: " + londonClose);
 
         deltas = new HashMap<Integer, Integer>();
         rthDeltas = new HashMap<Integer, Integer>();
@@ -122,10 +115,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
     @Override
     protected void calculateValues(DataContext ctx) {
         String session = getSettings().getInput("SessionInput").toString();
-//        BarSize barSize = BarSize.getBarSize(
-//                Enums.BarSizeType.CONSTANT_VOLUME,
-//                1000
-//        );
         DataSeries series = ctx.getDataSeries();
 
         Instrument instrument = series.getInstrument();
@@ -165,7 +154,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
      * @return
      */
     private SessionDeltaPivot calculateDeltasForSession(DataContext ctx, DataSeries series, String session) {
-//        BarSize barSize;
         long sessionStart;
         long sessionEnd;
         LocalDateTime sessionStartDateTime;
@@ -174,25 +162,21 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 sessionStartDateTime = getRthOpenLocalDateTime();
                 sessionStart = sessionStartDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
                 break;
             case SESSION_LONDON: // Calculate pivots during London session
                 sessionStartDateTime = getLondonOpen();
                 sessionStart = sessionStartDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
-//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 10000);
                 break;
             case SESSION_JPY: //
             default:
                 debug("USING DEFAULT SESSION RTH for session: " + session);
                 sessionStartDateTime = getRthOpenLocalDateTime();
-//                barSize = BarSize.getBarSize(Enums.BarSizeType.CONSTANT_VOLUME, 5000);
                 sessionStart = sessionStartDateTime.toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
                 sessionEnd = sessionStartDateTime.plusHours(6).plusMinutes(30).toEpochSecond(ZoneOffset.ofHours(-4)) * 1000; // -4 for EDT
         }
 
         // Iterate over DataSeries and compute deltas. THe Max and Min are tracked also
-        //DataSeries series = ctx.getDataSeries(barSize);
         int minDelta = 0;
         int minDeltaIndex = 0;
         int maxDelta = 0;
@@ -218,8 +202,6 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             if (series.getEndTime(i) > sessionEnd)
                 continue; // ignore if bar is after session close
 
-//            if (rthDeltas.get(i) == null) {
-//                int delta = getDeltaForTicks(ctx.getInstrument().getTicks(series.getStartTime(i), series.getEndTime(i)));
             if (deltaBars.get(i) == null) {
                 deltaBar = getDeltaForTicksAsDeltaBar(ctx.getInstrument().getTicks(series.getStartTime(i), series.getEndTime(i)));
                 deltaBars.put(i, deltaBar);
@@ -248,7 +230,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             debug("startIndex: " + startIndex);
 
             series.setPriceBarColor(i, series.getOpen(i) < series.getClose(i) ? defaults.getBarUpColor() : defaults.getBarDownColor());
-            if (getSettings().getBoolean("ShowDeveloping", false) && i > startIndex + numBars) {
+            if (getSettings().getBoolean("SmoothingEnabled", false) && i > startIndex + numBars) {
                 debug("Calculating rolling window delta sum");
                 int rollingWindowDeltaSum = 0;
                 int rollingWindowStart = i - numBars;
