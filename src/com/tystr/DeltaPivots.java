@@ -51,9 +51,9 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", Color.RED, 1.0f, null, true, false, false));
         grp.addRow(new InputDescriptor("SessionInput", "Session", new String[]{SESSION_RTH, SESSION_JPY, SESSION_LONDON}, SESSION_RTH));
 
-        grp.addRow(new BooleanDescriptor("ShowDevelopingLines", "Show Lines for Developing SDP", false));
+        grp.addRow(new BooleanDescriptor("HighlightBarsLines", "Show Lines for Developing SDP", false));
 
-        grp.addRow(new BooleanDescriptor("ShowDeveloping", "Highlight Bars", true));
+        grp.addRow(new BooleanDescriptor("HighlightBars", "Highlight Bars", true));
         grp.addRow(new BooleanDescriptor("SmoothingEnabled", "Enable Smoothing", false));
         grp.addRow(new IntegerDescriptor("SmoothingBars", "Bars to Smooth", 5, 1, 20, 1));
 
@@ -115,7 +115,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             debug("SessionDeltaPivot: DataSeries Bar Index " + sdp.getBarIndex());
             clearFigures();
 
-            boolean showLines = getSettings().getBoolean("ShowDevelopingLines");
+            boolean showLines = getSettings().getBoolean("HighlightBarsLines");
             // if current session only show lines if enab led
             if (instrument.isInsideTradingHours(LocalDateTime.now().toEpochSecond(ZoneOffset.ofHours(-4)), true) && showLines) {
                 addFiguresForSessionDeltaPivot(sdp, ctx.getDefaults());
@@ -231,13 +231,15 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         }
         debug("Calculated MAX rollingWindowDeltaSum: " + maxRollingWindowDeltaSum  + " starting at index " + maxRollingDeltaWindowDeltaStartIndex);
 
-        // highlight rolling window max delta bars
+        // Calculate High and Low of the rolling window
         float rollingWindowHigh = Float.NEGATIVE_INFINITY;
         float rollingWindowLow = Float.POSITIVE_INFINITY;
         for (int i = maxRollingDeltaWindowDeltaStartIndex; i < maxRollingDeltaWindowDeltaStartIndex + numBars; i++) {
             if (series.getHigh(i) > rollingWindowHigh) rollingWindowHigh = series.getHigh(i);
             if (series.getLow(i) < rollingWindowLow) rollingWindowLow = series.getLow(i);
-            series.setPriceBarColor(i, Color.GREEN);
+            if (getSettings().getBoolean("HighlightBars", false)) {
+                series.setPriceBarColor(i, Color.GREEN);
+            }
         }
 
         int sdpIndex = Math.abs(maxDelta) > Math.abs(minDelta) ? maxDeltaIndex : minDeltaIndex;
@@ -256,7 +258,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         }
 
         // Color SDP bar
-        if (getSettings().getBoolean("ShowDeveloping", false)) {
+        if (getSettings().getBoolean("HighlightBars", false)) {
             series.setPriceBarColor(sdpIndex, Color.GREEN);
         }
 
