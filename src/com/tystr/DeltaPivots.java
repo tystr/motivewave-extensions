@@ -1,6 +1,7 @@
 package com.tystr;
 
 import java.awt.*;
+import java.awt.geom.Point2D;
 import java.time.*;
 import java.util.*;
 import java.util.List;
@@ -36,6 +37,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
     // don't do this - used to reset bar colors for developing delta
     private Defaults defaults;
+    private ArrayList<Line> lines;
 
     @Override
     public void initialize(Defaults defaults) {
@@ -67,6 +69,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         if (now.isBefore(rthOpenDateTime)) rthOpenDateTime = rthOpenDateTime.minusDays(1);
 
         deltaBars = new HashMap<>();
+        lines = new ArrayList<>();
     }
 
     private LocalDateTime getLondonOpen() {
@@ -127,6 +130,12 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         }
 
         super.calculateValues(ctx);
+
+
+        long last = ctx.getDataSeries().getVisibleEndTime();
+        for (Line line : lines) {
+            line.setEnd(last, line.getEndValue());
+        }
     }
 
     /**
@@ -243,6 +252,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         }
 
         int sdpIndex = Math.abs(maxDelta) > Math.abs(minDelta) ? maxDeltaIndex : minDeltaIndex;
+        long endOfDay = series.getInstrument().getEndOfDay(series.getStartTime(sdpIndex), false);
         if (getSettings().getBoolean("SmoothingEnabled")) {
 
             return new SessionDeltaPivot(
@@ -252,7 +262,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                     rollingWindowLow,
                     session,
                     series.getStartTime(maxRollingDeltaWindowDeltaStartIndex),
-                    false
+                    false,
+                    endOfDay
             );
 
         }
@@ -269,7 +280,8 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 series.getLow(sdpIndex),
                 session,
                 series.getStartTime(sdpIndex),
-                false
+                false,
+                endOfDay
         );
     }
 
@@ -285,6 +297,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         sdpArrow.setFillColor(Color.ORANGE);
 
         long sdpStartTime = sdp.getStartTime();
+        long end = sdp.getEndOfDay();
         double sdpHigh = sdp.getHigh();
         double sdpLow = sdp.getLow();
         double sdpValue = sdp.getPivot();
@@ -300,20 +313,19 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         PathInfo highExtensionPathInfo = settings.getPath("HighExtensionLine");
         PathInfo lowExtensionPathInfo = settings.getPath("LowExtensionLine");
 
-        // SDP pivot and high/low
-        Line sdpLine = LineBuilder.create(sdpStartTime, sdpValue)
+        Line sdpLine = LineBuilder.create(sdpStartTime, sdpValue, end)
                 .setColor(sdpPivotPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(sdpPivotPathInfo.getStroke())
                 .setText("SDP: " + sdpValue)
                 .build();
-        Line sdpHighLine = LineBuilder.create(sdpStartTime, sdpHigh)
+        Line sdpHighLine = LineBuilder.create(sdpStartTime, sdpHigh, end)
                 .setColor(sdpPivotPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(sdpPivotPathInfo.getStroke())
                 .setText("SDP High: " + sdpHigh)
                 .build();
-        Line sdpLowLine = LineBuilder.create(sdpStartTime, sdpLow)
+        Line sdpLowLine = LineBuilder.create(sdpStartTime, sdpLow, end)
                 .setColor(sdpPivotPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(sdpPivotPathInfo.getStroke())
@@ -321,38 +333,38 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 .build();
 
         // extensions above/below pivot
-        Line sdpHighExtensionLine1 = LineBuilder.create(sdpStartTime, sdpHighExtension1)
+        Line sdpHighExtensionLine1 = LineBuilder.create(sdpStartTime, sdpHighExtension1, end)
                 .setColor(highExtensionPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(highExtensionPathInfo.getStroke())
                 .setText("SDP High Ext 1: " + sdpHighExtension1)
                 .build();
-        Line sdpHighExtensionLine2 = LineBuilder.create(sdpStartTime, sdpHighExtension2)
+        Line sdpHighExtensionLine2 = LineBuilder.create(sdpStartTime, sdpHighExtension2, end)
                 .setColor(highExtensionPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(highExtensionPathInfo.getStroke())
                 .setText("SDP High Ext 2: " + sdpHighExtension2)
                 .build();
-        Line sdpHighExtensionLine3 = LineBuilder.create(sdpStartTime, sdpHighExtension3)
+        Line sdpHighExtensionLine3 = LineBuilder.create(sdpStartTime, sdpHighExtension3, end)
                 .setColor(highExtensionPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(highExtensionPathInfo.getStroke())
                 .setText("SDP High Ext 3: " + sdpHighExtension3)
                 .build();
 
-        Line sdpLowExtensionLine1 = LineBuilder.create(sdpStartTime, sdpLowExtension1)
+        Line sdpLowExtensionLine1 = LineBuilder.create(sdpStartTime, sdpLowExtension1, end)
                 .setColor(lowExtensionPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(lowExtensionPathInfo.getStroke())
                 .setText("SDP Low Ext 1: " + sdpLowExtension1)
                 .build();
-        Line sdpLowExtensionLine2 = LineBuilder.create(sdpStartTime, sdpLowExtension2)
+        Line sdpLowExtensionLine2 = LineBuilder.create(sdpStartTime, sdpLowExtension2, end)
                 .setColor(lowExtensionPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(lowExtensionPathInfo.getStroke())
                 .setText("SDP Low Ext 2: " + sdpLowExtension2)
                 .build();
-        Line sdpLowExtensionLine3 = LineBuilder.create(sdpStartTime, sdpLowExtension3)
+        Line sdpLowExtensionLine3 = LineBuilder.create(sdpStartTime, sdpLowExtension3, end)
                 .setColor(lowExtensionPathInfo.getColor())
                 .setFont(defaults.getFont())
                 .setStroke(lowExtensionPathInfo.getStroke())
@@ -360,15 +372,23 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
                 .build();
 
         addFigure(sdpLine);
+        lines.add(sdpLine);
         addFigure(sdpHighLine);
+        lines.add(sdpHighLine);
         addFigure(sdpLowLine);
+        lines.add(sdpLowLine);
         addFigure(sdpHighExtensionLine1);
+        lines.add(sdpHighExtensionLine1);
         addFigure(sdpHighExtensionLine2);
+        lines.add(sdpHighExtensionLine2);
         addFigure(sdpHighExtensionLine3);
+        lines.add(sdpHighExtensionLine3);
         addFigure(sdpLowExtensionLine1);
+        lines.add(sdpLowExtensionLine1);
         addFigure(sdpLowExtensionLine2);
+        lines.add(sdpLowExtensionLine2);
         addFigure(sdpLowExtensionLine3);
-        addFigure(sdpArrow);
+        lines.add(sdpLowExtensionLine3);
     }
 
     /**
@@ -382,13 +402,13 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         private String text;
         private Font font;
 
-        private LineBuilder(long startTime, double value) {
+        private LineBuilder(long startTime, double value, long endTime) {
             this.coordinate1 = new Coordinate(startTime, value);
-            this.coordinate2 = new Coordinate(startTime+1, value);
+            this.coordinate2 = new Coordinate(endTime, value);
         }
 
-        public static LineBuilder create(long startTime, double value) {
-            return new LineBuilder(startTime, value);
+        public static LineBuilder create(long startTime, double value, long endTime) {
+            return new LineBuilder(startTime, value, endTime);
         }
         public LineBuilder setColor(Color color) {
             this.color = color;
@@ -408,13 +428,31 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         }
 
         public Line build() {
-            Line line = new Line(coordinate1, coordinate2);
+            MyLine line = new MyLine(coordinate1, coordinate2);
             line.setColor(color);
             line.setStroke(stroke);
-            line.setExtendRightBounds(true);
+            line.setExtendRightBounds(false);
             line.setText(text, font);
 
             return line;
+        }
+    }
+
+    // Custom class to override the layout to position text where we want it
+    private static class MyLine extends Line {
+
+        public MyLine(Coordinate var1, Coordinate var2) {
+            super(var1, var2);
+        }
+
+        @Override
+        public void layout(DrawContext ctx) {
+            super.layout(ctx);
+            Text text = super.getText();
+            text.setHAlign(Enums.TextAlign.RIGHT);
+            Point2D end = ctx.translate(super.getEndTime(), super.getEndValue());
+            text.setLocation(end.getX() - text.getWidth(), end.getY());
+            text.setShowOutline(false);
         }
     }
 
@@ -428,6 +466,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         private final long startTime;
         private final long delta;
         private final float deltaPoc;
+        private final long endOfDay;
 
         /**
          *
@@ -437,7 +476,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          * @param session The session during which the pivot was calculated
          * @param startTime Start time of the bar used to compute the pivot levels
          */
-        public SessionDeltaPivot(DeltaBar deltaBar, int barIndex, float high, float low, String session, long startTime, boolean usePocAsPivot) {
+        public SessionDeltaPivot(DeltaBar deltaBar, int barIndex, float high, float low, String session, long startTime, boolean usePocAsPivot, long endOfDay) {
             this.barIndex = barIndex;
             this.high = high;
             this.low = low;
@@ -446,6 +485,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             this.startTime = startTime;
             this.delta = deltaBar.getDelta();
             this.deltaPoc = deltaBar.getDeltaPOC();
+            this.endOfDay = endOfDay;
 
             if (usePocAsPivot) {
                 this.pivot = deltaPoc;
@@ -523,6 +563,10 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
          */
         public float getDeltaPoc() {
             return this.deltaPoc;
+        }
+
+        public long getEndOfDay() {
+            return endOfDay;
         }
     }
 
