@@ -18,6 +18,7 @@ import com.motivewave.platform.sdk.common.desc.ValueDescriptor;
 import com.motivewave.platform.sdk.draw.Marker;
 import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.StudyHeader;
+import com.sun.jdi.Value;
 
 import java.awt.*;
 
@@ -25,12 +26,12 @@ import java.awt.*;
  * Combines a MACD, Moving Average and RSI into one study.
  */
 @StudyHeader(
-        namespace = "com.motivewave",
-        id = "COMP_SAMPLE",
+        namespace = "com.tystr",
+        id = "TYSTX_MACD_ADX_PINCH",
         rb = "study_examples.nls.strings", // locale specific strings are loaded from here
-        name = "TITLE_COMP_SAMPLE",
-        desc = "DESC_COMP_SAMPLE",
-        overlay = false,
+        name = "MACD / ADX Pinch",
+        desc = "MACD / ADX Pinch",
+        overlay = true,
         signals = true)
 public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
     enum Values {MA, MACD, SIGNAL, HIST, RSI, UP, DOWN, ADX, PDI, NDI, DX, PDM, NDM, TR, HIST_ADX};
@@ -121,26 +122,28 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
         desc.declareSignal(Signals.RSI_TOP, get("RSI_TOP"));
         desc.declareSignal(Signals.RSI_BOTTOM, get("RSI_BOTTOM"));
 
-        // Price plot (moving average)
-        desc.getPricePlot().setLabelSettings(MA_INPUT, MA_PERIOD, Inputs.SHIFT, Inputs.BARSIZE);
-        desc.getPricePlot().setLabelPrefix("MA");
-        desc.getPricePlot().declarePath(Values.MA, Inputs.PATH);
-        desc.getPricePlot().declareIndicator(Values.MA, Inputs.IND);
-        // This tells MotiveWave that the MA values come from the data series defined by "BARSIZE"
-        desc.setValueSeries(Values.MA, Inputs.BARSIZE);
+//        // Price plot (moving average)
+//        desc.getPricePlot().setLabelSettings(MA_INPUT, MA_PERIOD, Inputs.SHIFT, Inputs.BARSIZE);
+//        desc.getPricePlot().setLabelPrefix("MA");
+//        desc.getPricePlot().declarePath(Values.MA, Inputs.PATH);
+//        desc.getPricePlot().declareIndicator(Values.MA, Inputs.IND);
+//        // This tells MotiveWave that the MA values come from the data series defined by "BARSIZE"
+//        desc.setValueSeries(Values.MA, Inputs.BARSIZE);
+//
+//        // Default Plot (MACD)
+//        desc.setLabelSettings(MACD_INPUT, MACD_METHOD, MACD_PERIOD1, MACD_PERIOD2, Inputs.SIGNAL_PERIOD);
+//        desc.setLabelPrefix("MACD");
+//        desc.setTabName("MACD");
+//        desc.declarePath(Values.MACD, MACD_LINE);
+//        desc.declarePath(Values.SIGNAL, Inputs.SIGNAL_PATH);
+//        desc.declareBars(Values.HIST, Inputs.BAR);
+//        desc.declareIndicator(Values.MACD, MACD_IND);
+//        desc.declareIndicator(Values.SIGNAL, Inputs.SIGNAL_IND);
+//        desc.declareIndicator(Values.HIST, HIST_IND);
+//        desc.setRangeKeys(Values.MACD, Values.SIGNAL, Values.HIST);
+//        desc.addHorizontalLine(new LineInfo(0, null, 1.0f, new float[]{3, 3}));
 
-        // Default Plot (MACD)
-        desc.setLabelSettings(MACD_INPUT, MACD_METHOD, MACD_PERIOD1, MACD_PERIOD2, Inputs.SIGNAL_PERIOD);
-        desc.setLabelPrefix("MACD");
-        desc.setTabName("MACD");
-        desc.declarePath(Values.MACD, MACD_LINE);
-        desc.declarePath(Values.SIGNAL, Inputs.SIGNAL_PATH);
-        desc.declareBars(Values.HIST, Inputs.BAR);
-        desc.declareIndicator(Values.MACD, MACD_IND);
-        desc.declareIndicator(Values.SIGNAL, Inputs.SIGNAL_IND);
-        desc.declareIndicator(Values.HIST, HIST_IND);
-        desc.setRangeKeys(Values.MACD, Values.SIGNAL, Values.HIST);
-        desc.addHorizontalLine(new LineInfo(0, null, 1.0f, new float[]{3, 3}));
+        sd.addQuickSettings(RSI_INPUT);
     }
 
     // Since the Moving Average (MA) is plotted on a different data series, we need to override this method
@@ -371,43 +374,75 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
 //        }
 
 
-        double barLength = series.getEndTime(index) - series.getStartTime(index);
-        double barBreadth = series.getOpen(index) - series.getClose(index);
-//        debug("Bar Length at index " + index + ": " + barLength);
-//        debug("Bar Breadth at index " + index + ": " + barBreadth);
-        if (barLength <= 30000 && barBreadth >= 2.5) {
-            // initiative bar? Highlight candle
-            Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getClose(index) - 8), Enums.MarkerType.ARROW);
-            arrow.setFillColor(Color.RED);
-            arrow .setSize(Enums.Size.LARGE);
-            addFigure(Plot.PRICE, arrow);
-        }
+//        double barLength = series.getEndTime(index) - series.getStartTime(index);
+//        double barBreadth = series.getOpen(index) - series.getClose(index);
+////        debug("Bar Length at index " + index + ": " + barLength);
+////        debug("Bar Breadth at index " + index + ": " + barBreadth);
+//        if (barLength <= 30000 && barBreadth >= 2.5) {
+//            // initiative bar? Highlight candle
+//            Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getClose(index) - 8), Enums.MarkerType.ARROW);
+//            arrow.setFillColor(Color.RED);
+//            arrow .setSize(Enums.Size.LARGE);
+//            addFigure(Plot.PRICE, arrow);
+//        }
 
 
 
         if (series.getBoolean( "HasMACD") && series.getBoolean("HasADX")) {
-            double macdThreshold = -1.5;
-            double adxThreshold = 30;
+            double macdThreshold = -1;
+            double adxThreshold = 12;
+            double macdOptimalThreshold = -1;
+            double adxOptimalThreshold = 30;
+
             double macd = series.getDouble(index, Values.MACD);
             double macdSignal = series.getDouble(index, Values.SIGNAL);
             double adx = series.getDouble(index, Values.ADX);
+            boolean macdSlopeUp = false;
+            boolean adxSlopeDown = false;
             if (macd < macdThreshold && adx > adxThreshold) {
-                debug("SIGNAL AT INDEX: " + index);
-                debug("SIGNAL MACD: " + macd);
-                debug("SIGNAL MACD SIGNAL: " + macdSignal);
-                debug("SIGNAL ADX: " + adx);
+                int prevIndex = index - 1;
+                if (prevIndex > series.getStartIndex()) {
+                    // Is the pinch "releasing" (MACD slope is up, ADX slope is down)
+                    macdSlopeUp = series.getDouble(prevIndex, Values.MACD) < macd;
+//                    adxSlopeDown = series.getDouble(prevIndex, Values.ADX) > adx;
 
-                Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), series.getClose(index) - 8), Enums.MarkerType.ARROW);
-                //Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), 2), Enums.MarkerType.ARROW);
-                if (crossedAbove(series, index, Values.MACD, Values.SIGNAL)) {
-                    signalArrow.setFillColor(Color.GREEN);
-                    signalArrow.setSize(Enums.Size.VERY_LARGE);
-                    addFigure(Plot.PRICE, signalArrow);
-                    series.setPriceBarColor(index, Color.GREEN);
-                } else if (macdSignal > macd){
-                    signalArrow.setFillColor(Color.ORANGE);
-                    addFigure(Plot.PRICE, signalArrow);
+                    // calculate slope
+                    // (y2 - y1) / (x2 - x1);
+                    double adxSlope = (adx - series.getDouble(index - 1, Values.ADX)) / (series.getEndTime(index - 1) - series.getEndTime(index));
+                    double macdSlope = (macd - series.getDouble(index - 1, Values.MACD)) / (series.getEndTime(index - 1) - series.getEndTime(index));
+                    debug("CALCULATED ADX SLOPE: (" + series.getDouble(index-1, Values.ADX) + ") (" + adx + "): "+adxSlope);
+                    debug("CALCULATED MACD SLOPE: (" + series.getDouble(index-1, Values.MACD) + ") (" + macd+ "): "+macdSlope);
+
+                    debug("SLOPE: " + adxSlope);
+                    adxSlopeDown = adxSlope > 0.00003; // is this a good way to filter these
+                    macdSlopeUp = macdSlope < -0.000005;
+                    debug("ADX SLOPE DOWN ENOUGH?" + adxSlopeDown);
+                    debug("MACD SLOPE DOWN ENOUGH?" + macdSlopeUp + " " + macdSlope);
+                    //debug("ADX DIFFERENCE: " + (series.getDouble(prevIndex, Values.ADX) - adx));
                 }
+
+
+
+                // we are "releasing"
+                    debug("SIGNAL AT INDEX: " + index);
+                    debug("SIGNAL MACD: " + macd);
+                    debug("SIGNAL MACD SIGNAL: " + macdSignal);
+                    debug("SIGNAL ADX: " + adx);
+                    debug(macdSlopeUp + " " +adxSlopeDown);
+
+                    Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 1), Enums.MarkerType.ARROW);
+                    //Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), 2), Enums.MarkerType.A1ROW);
+                    if (macdSlopeUp && adxSlopeDown) { //&& crossedAbove(series, index, Values.MACD, Values.SIGNAL)) {
+                        series.setPriceBarColor(index, Color.GREEN);
+                        if (crossedAbove(series, index, Values.MACD, Values.SIGNAL)) {
+                            signalArrow.setFillColor(Color.GREEN);
+                            signalArrow.setSize(Enums.Size.VERY_LARGE);
+                            addFigure(Plot.PRICE, signalArrow);
+                        }
+                    } else if (macdSignal > macd) {
+                        signalArrow.setFillColor(Color.ORANGE);
+                        //addFigure(Plot.PRICE, signalArrow);
+                    }
             }
         }
 
