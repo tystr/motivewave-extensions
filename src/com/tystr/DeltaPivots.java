@@ -86,7 +86,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
     private LocalDateTime getRthOpenLocalDateTime() {
         // RTH OFFSET - only look at afternoon hours
-        long offset = 4;
+        long offset = 0;
         LocalTime rthOpenTime = LocalTime.of(9, 30).plusHours(offset);
         LocalDateTime rthOpenDateTime = LocalDateTime.of(LocalDate.now(), rthOpenTime);
         LocalDateTime now = LocalDateTime.now();
