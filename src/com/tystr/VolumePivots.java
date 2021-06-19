@@ -23,7 +23,7 @@ import java.util.*;
         namespace = "com.tystr",
         id = "TYSTR_VOLUME_PIVOTS",
         name = "Session Volume Pivots",
-        desc = "This study plots volume pivots for a given session.",
+        desc = "This study plots volume pivots.",
         overlay = true,
         requiresVolume = true,
         allowTickAggregate = true
@@ -56,17 +56,18 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
         grp.addRow(new PathDescriptor("PivotLine", "Pivot Line", Color.ORANGE, 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("HighExtensionLine", "High Extensions", Color.BLUE, 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", Color.RED, 1.0f, null, true, false, false));
-        grp.addRow(new InputDescriptor("SessionInput", "Session", new String[]{SESSION_RTH, SESSION_JPY, SESSION_LONDON}, SESSION_RTH));
+        grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 0.70, 0, 100, 0.01));
+//        grp.addRow(new InputDescriptor("SessionInput", "Session", new String[]{SESSION_RTH, SESSION_JPY, SESSION_LONDON}, SESSION_RTH));
 
-        grp.addRow(new BooleanDescriptor("HighlightBarsLines", "Show Lines for Developing SVP", false));
+//        grp.addRow(new BooleanDescriptor("HighlightBarsLines", "Show Lines for Developing SVP", false));
 
         grp.addRow(new BooleanDescriptor("HighlightBars", "Highlight Bars", true));
-        grp.addRow(new BooleanDescriptor("SmoothingEnabled", "Enable Smoothing", false));
-        grp.addRow(new IntegerDescriptor("SmoothingBars", "Bars to Smooth", 5, 1, 20, 1));
+//        grp.addRow(new BooleanDescriptor("SmoothingEnabled", "Enable Smoothing", false));
+//        grp.addRow(new IntegerDescriptor("SmoothingBars", "Bars to Smooth", 5, 1, 20, 1));
 
-        sd.addDependency(new EnabledDependency("SmoothingEnabled", "SmoothingBars"));
-
-        sd.addQuickSettings("SessionInput");
+//        sd.addDependency(new EnabledDependency("SmoothingEnabled", "SmoothingBars"));
+//
+        sd.addQuickSettings("SessionInput", "PivotLine", "HighExtensionLine", "LowExtensionLine");
 
         LocalTime rthOpenTime = LocalTime.of(9, 30);
         LocalDateTime rthOpenDateTime = LocalDateTime.of(LocalDate.now(), rthOpenTime);
@@ -92,11 +93,12 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
         );
         sessionEnd = sessionEnd.plusHours(1);
 
-        if (!instrument.isInsideTradingHours(series.getStartTime(index), true)) {
+//        if (!instrument.isInsideTradingHours(series.getStartTime(index), true)) {
+        ZonedDateTime barStart1 = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(index)), ZoneId.of("UTC"));
+        if (barStart1.isAfter(sessionEnd)) {
             if (calculating) {
                 debug("VALUE AREA FINAL VAL: " + valueArea.firstKey());
                 debug("VALUE AREA FINAL VAH: " + valueArea.lastKey());
-
 
                 float vah = valueArea.lastKey();
                 float val = valueArea.firstKey();
@@ -109,11 +111,6 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                 PathInfo svpPivotPathInfo = settings.getPath("PivotLine");
                 PathInfo highExtensionPathInfo = settings.getPath("HighExtensionLine");
                 PathInfo lowExtensionPathInfo = settings.getPath("LowExtensionLine");
-
-                ZonedDateTime sessionEndGlobex = ZonedDateTime.ofInstant(
-                        Instant.ofEpochMilli(instrument.getEndOfDay(series.getStartTime(index), false)), ZoneId.of("UTC")
-                );
-
 
                 long lineStart = sessionStart.toEpochSecond()*1000;
                 long lineEnd = sessionStart.plusDays(1).toEpochSecond()*1000;
@@ -156,8 +153,6 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                 addFigure(Plot.PRICE, svpHighExtensionLine2);
                 addFigure(Plot.PRICE, svpLowExtensionLine1);
                 addFigure(Plot.PRICE, svpLowExtensionLine2);
-
-
             }
 
             calculating = false;
@@ -169,7 +164,7 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
             // if bar is after open + OFFSET (4 hours == 1:30pm EST)
             int OFFSET_HOURS = 4; // @todo make this configurable
             ZonedDateTime barStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(index)), ZoneId.of("UTC"));
-            ZonedDateTime threshold = sessionStart.plusHours(OFFSET_HOURS);
+            ZonedDateTime threshold = sessionStart.plusHours(OFFSET_HOURS).minusMinutes(1);
 
 
             // return if bar start is before threshold
@@ -198,8 +193,6 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
 
             // @todo calculate volume by price
             float interval = (float) instrument.getTickSize();
-            float range = series.getHigh(index) - series.getLow(index);
-            double numberOfPrices = range / interval;
 
             TickOperation t = new TickOperation() {
                 @Override
@@ -270,7 +263,7 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
 
                 float valueAreaPercent = (float)runningVolume / totalVolume;
 //                debug("running volume: " + runningVolume + " VA Percent: " + valueAreaPercent);
-                if (valueAreaPercent > 0.70) break;
+                if (valueAreaPercent > getSettings().getDouble("ValueAreaPercent")) break;
             }
 
 
