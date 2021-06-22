@@ -29,13 +29,6 @@ import java.util.*;
         allowTickAggregate = true
 )
 public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
-    final static String SESSION_RTH = "RTH";
-    final static String SESSION_JPY = "JPY";
-    final static String SESSION_LONDON = "EURO/London";
-    final static DayOfWeek[] tradingDays = new DayOfWeek[]{
-            DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY
-    };
-
     // don't do this - used to reset bar colors for developing delta
     private Defaults defaults;
     private ArrayList<Line> lines;
@@ -43,6 +36,20 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
     private SortedMap<Float, Integer> volumeByPrice;
     private SortedMap<Float, Integer> valueArea;
     private boolean calculating = false;
+
+    private enum Sessions{
+            RTH, // rth window, 1:30pm - 4:30pm
+            GLOBEX //
+    }
+
+    private Sessions lastSession;
+
+
+    // Window to use to calculate volume and value area
+
+    private ZonedDateTime windowStart;
+    private ZonedDateTime windowEnd;
+
 
     @Override
     public void initialize(Defaults defaults) {
@@ -57,16 +64,8 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
         grp.addRow(new PathDescriptor("HighExtensionLine", "High Extensions", Color.BLUE, 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", Color.RED, 1.0f, null, true, false, false));
         grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 0.70, 0, 100, 0.01));
-//        grp.addRow(new InputDescriptor("SessionInput", "Session", new String[]{SESSION_RTH, SESSION_JPY, SESSION_LONDON}, SESSION_RTH));
-
-//        grp.addRow(new BooleanDescriptor("HighlightBarsLines", "Show Lines for Developing SVP", false));
 
         grp.addRow(new BooleanDescriptor("HighlightBars", "Highlight Bars", true));
-//        grp.addRow(new BooleanDescriptor("SmoothingEnabled", "Enable Smoothing", false));
-//        grp.addRow(new IntegerDescriptor("SmoothingBars", "Bars to Smooth", 5, 1, 20, 1));
-
-//        sd.addDependency(new EnabledDependency("SmoothingEnabled", "SmoothingBars"));
-//
         sd.addQuickSettings("SessionInput", "PivotLine", "HighExtensionLine", "LowExtensionLine");
 
         LocalTime rthOpenTime = LocalTime.of(9, 30);
@@ -82,21 +81,102 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
 
     @Override
     protected void calculate(int index, DataContext ctx) {
-        DataSeries series = ctx.getDataSeries();
-        Instrument instrument = series.getInstrument();
+        ZonedDateTime today = ZonedDateTime.ofInstant(Instant.now(), ZoneId.of("UTC"));
 
+        DataSeries series = ctx.getDataSeries();
+        // max days
+        ZonedDateTime barStart1 = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(index)), ZoneId.of("UTC"));
+        if (barStart1.isBefore(today.minusDays(10))) {
+            return;
+        }
+
+        Instrument instrument = series.getInstrument();
+//
         ZonedDateTime sessionStart = ZonedDateTime.ofInstant(
                 Instant.ofEpochMilli(instrument.getStartOfDay(series.getStartTime(index), true)), ZoneId.of("UTC")
         );
         ZonedDateTime sessionEnd = ZonedDateTime.ofInstant(
                 Instant.ofEpochMilli(instrument.getEndOfDay(series.getStartTime(index), true)), ZoneId.of("UTC")
         );
-        sessionEnd = sessionEnd.plusHours(1);
 
-//        if (!instrument.isInsideTradingHours(series.getStartTime(index), true)) {
-        ZonedDateTime barStart1 = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(index)), ZoneId.of("UTC"));
-        if (barStart1.isAfter(sessionEnd)) {
+        // Window for RTH Pivots (using euro session volume)
+//        ZonedDateTime windowStart = ZonedDateTime.ofInstant(
+//                Instant.ofEpochMilli(instrument.getStartOfDay(series.getStartTime(index), true)), ZoneId.of("UTC")
+//        ).minusDays(1).plusHours(18);
+//        ZonedDateTime windowEnd = windowStart.plusHours(6);
+
+
+        // Window for globex pivots (using RTH session volume)
+//        ZonedDateTime windowStart = ZonedDateTime.ofInstant(
+//                Instant.ofEpochMilli(instrument.getStartOfDay(series.getStartTime(index), true)), ZoneId.of("UTC")
+//        ).plusHours(4);
+//        ZonedDateTime windowEnd = windowStart.plusHours(3).plusMinutes(30);
+
+//        if (index == series.getStartIndex()) {
+//            debug("windowStart: " + windowStart.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//            debug("windowEnd: " + windowEnd.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//        }
+
+
+//        // Window to use to calculate volume and value area
+//        ZonedDateTime windowStart;
+//        ZonedDateTime windowEnd;
+
+        Sessions currentSession = null; //Sessions.RTH;
+
+        // is last bar in window
+        int nextIndex = index++;
+        boolean lastBarInWindow = false;
+        if (windowEnd != null && series.size() >= nextIndex) {
+            ZonedDateTime nextBarStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(nextIndex)), ZoneId.of("UTC"));
+            if (nextBarStart.isAfter(windowEnd)) {
+                lastBarInWindow = true;
+//
+//                Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)), Enums.MarkerType.SQUARE);
+//                arrow.setSize(Enums.Size.MEDIUM);
+//                addFigure(Plot.PRICE, arrow);
+            }
+        }
+
+
+
+
+        long startOfDay = instrument.getStartOfDay(series.getStartTime(index), true);
+        // Set window based on bar time
+        if (instrument.isInsideTradingHours(series.getStartTime(index), true)) {
+            currentSession = Sessions.RTH;
+            windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startOfDay), ZoneId.of("UTC")).plusHours(4);
+            windowEnd = windowStart.plusHours(3).plusMinutes(30);
+        } else {
+            currentSession = Sessions.GLOBEX;
+//            windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startOfDay), ZoneId.of("UTC"))
+//                    .minusDays(1).plusHours(18);
+            long startOfEveningSession = instrument.getStartOfEveningSession(series.getStartTime(index));
+            windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startOfEveningSession), ZoneId.of("UTC"))
+//                    .minusDays(1).plusHours(18);
+                    .minusDays(1).plusHours(9).plusMinutes(30);
+            windowEnd = windowStart.plusHours(6);
+        }
+        if (null ==lastSession) lastSession = currentSession;
+
+
+
+//        debug("barStart: " + barStart1.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "isInsideTradingHours: " + instrument.isInsideTradingHours(series.getStartTime(index), true));
+
+//        if (index == series.getStartIndex()) {
+//            debug("windowStart: " + windowStart.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//            debug("windowEnd: " + windowEnd.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//        }
+
+
+//        if (barStart1.isAfter(windowEnd)) {
+        if (lastBarInWindow) {
+            // if calculating, draw the lines
             if (calculating) {
+                debug("----------");
+                debug("drawing lines for session: " + barStart1.getDayOfMonth() + ", " + barStart1.getHour() + ":" + barStart1.getMinute());
+                debug("currentSession: " + currentSession);
+                debug("lastSession: " + lastSession);
                 debug("VALUE AREA FINAL VAL: " + valueArea.firstKey());
                 debug("VALUE AREA FINAL VAH: " + valueArea.lastKey());
 
@@ -114,10 +194,29 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
 
                 long lineStart = sessionStart.toEpochSecond()*1000;
                 long lineEnd = sessionStart.plusDays(1).toEpochSecond()*1000;
+                long globexLineStart = sessionStart.plusDays(1).toEpochSecond()*1000;
+                long globexLineEnd = sessionEnd.toEpochSecond()*1000;
                 Line svpLine = LineBuilder.create(lineStart, pivot, lineEnd)
                         .setColor(svpPivotPathInfo.getColor()) .setFont(defaults.getFont()) .setStroke(svpPivotPathInfo.getStroke())
-                        .setText("SVP: " + pivot)
+                        .setText("(" + lastSession + ") SVP: " + pivot)
                         .build();
+
+                switch (lastSession) {
+                    case RTH:
+                        svpLine.setColor(Color.ORANGE);
+                        svpLine.setStart(sessionEnd.toEpochSecond()*1000, pivot);
+                        lineStart = sessionEnd.toEpochSecond()*1000;
+                        break;
+                    case GLOBEX:
+                        svpLine.setColor(Color.MAGENTA);
+                        svpLine.setEnd(globexLineEnd, pivot);
+                        lineEnd = globexLineEnd;
+//                        svpLine.setStart(globexLineStart, pivot);
+//                        svpLine.setEnd(globexLineEnd, pivot);
+                        break;
+                    default:
+                        svpLine.setColor(Color.DARK_GRAY);
+                }
                 addFigure(Plot.PRICE, svpLine);
 
                 // extensions
@@ -158,27 +257,30 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
             calculating = false;
             volumeByPrice = new TreeMap<>(); // @todo reinitiatlize thisd for next vp
             valueArea = new TreeMap<>();
+            lastSession = currentSession;
             return;
         } else {
+
+//            debug("session: " + currentSession);
+//            debug("currentBarStart: " + barStart1.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//            debug("windowStart: " + windowStart.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//            debug("windowEnd: " + windowEnd.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+//            debug("insideWindow: " + (barStart1.isAfter(windowStart) && barStart1.isBefore(windowEnd)));
+
+
+
+
+
+
+
             //debug("inside trading hours");
             // if bar is after open + OFFSET (4 hours == 1:30pm EST)
-            int OFFSET_HOURS = 4; // @todo make this configurable
             ZonedDateTime barStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(index)), ZoneId.of("UTC"));
-            ZonedDateTime threshold = sessionStart.plusHours(OFFSET_HOURS).minusMinutes(1);
-
 
             // return if bar start is before threshold
-            if (barStart.isBefore(threshold)) {
-//                debug("before threshold, returning");
+            if (barStart.isBefore(windowStart)) {
                 return;
-            } else if (barStart.isAfter(sessionEnd)) {
-//                debug("After threshold, drawing pivots?");
-//                debug("calculating: " + calculating);
-                if (calculating) {
-//                    debug("VALUE AREA FINAL VAL: " + valueArea.firstKey());
-//                    debug("VALUE AREA FINAL VAH: " + valueArea.lastKey());
-                    calculating = false;
-                }
+            } else if (barStart.isAfter(windowEnd)) {
                 return;
             }
 
@@ -187,8 +289,17 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
             // debugging visual - highlight bars we should be using to calculate VP
             Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)), Enums.MarkerType.ARROW);
             arrow.setSize(Enums.Size.MEDIUM);
-            arrow.setFillColor(Color.ORANGE);
-            addFigure(Plot.PRICE, arrow);
+            switch (currentSession) {
+                case RTH:
+                    arrow.setFillColor(Color.ORANGE);
+                    break;
+                case GLOBEX:
+                    arrow.setFillColor(Color.MAGENTA);
+                    break;
+                default:
+                    arrow.setFillColor(Color.DARK_GRAY);
+            }
+//            addFigure(Plot.PRICE, arrow);
 
 
             // @todo calculate volume by price
