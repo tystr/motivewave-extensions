@@ -107,7 +107,7 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
             windowEnd = windowStart.plusHours(6);
         }
 
-        if (barStart1.isAfter(windowStart) && barStart1.isBefore(windowEnd)) {
+        if ((barStart1.isAfter(windowStart) || barStart1.isEqual(windowStart)) && barStart1.isBefore(windowEnd)) {
             isBarInsideWindow = true;
             if (getSettings().getBoolean("HighlightWindows", false)) {
                 Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)-2), Enums.MarkerType.TRIANGLE);
