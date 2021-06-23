@@ -24,7 +24,9 @@ import java.util.*;
         namespace = "com.tystr",
         id = "TYSTR_VOLUME_PIVOTS",
         name = "Session Volume Pivots",
-        desc = "This study plots volume pivots.",
+        desc = "This study plots volume pivots and extensions. These pivots are drawn at the midpoint of the " +
+                "value area of a volume profile calculated over a window of bars during the previous session." +
+                "Extensions (measured moves) are plotted above and below.",
         overlay = true,
         requiresVolume = true,
         allowTickAggregate = true
@@ -36,23 +38,13 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
 
     private SortedMap<Float, Integer> volumeByPrice;
     private SortedMap<Float, Integer> valueArea;
-    private boolean calculating = false;
 
     private enum Sessions {
         RTH, // rth window, 1:30pm - 4:30pm
         GLOBEX //
     }
 
-    private Sessions lastSession;
-
-
-    // Window to use to calculate volume and value area
-
-    private ZonedDateTime windowStart;
-    private ZonedDateTime windowEnd;
-
     private SortedMap<Integer, SortedMap<Float, Integer>> volumeByPriceByIndex;
-
     private boolean isBarInsideWindow = false;
 
     @Override
@@ -67,10 +59,16 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
         grp.addRow(new PathDescriptor("PivotLine", "Pivot Line", Color.ORANGE, 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("HighExtensionLine", "High Extensions", Color.BLUE, 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", Color.RED, 1.0f, null, true, false, false));
-        grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 0.70, 0, 100, 0.01));
+        grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 70, 0, 100, 0.10));
 
         grp.addRow(new BooleanDescriptor("HighlightBars", "Highlight Bars", true));
-        sd.addQuickSettings("SessionInput", "PivotLine", "HighExtensionLine", "LowExtensionLine");
+        sd.addQuickSettings("SessionInput", "PivotLine", "HighExtensionLine", "LowExtensionLine", "ValueAreaPercent");
+
+        // These are advanced or debug only settings - @todo remove from published version
+        var advancedTab= sd.addTab("Advanced");
+        SettingGroup advancedGroup = advancedTab.addGroup("Debug");
+        advancedGroup.addRow(new BooleanDescriptor("HighlightWindows", "Highlight Window", false));
+        advancedGroup.addRow(new BooleanDescriptor("ShowVolumeByPrice", "Show Volume By Price", false));
 
         LocalTime rthOpenTime = LocalTime.of(9, 30);
         LocalDateTime rthOpenDateTime = LocalDateTime.of(LocalDate.now(), rthOpenTime);
@@ -85,20 +83,18 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
 
     @Override
     protected void calculate(int index, DataContext ctx) {
-        ZonedDateTime today = ZonedDateTime.ofInstant(Instant.now(), ZoneId.of("UTC"));
-
         DataSeries series = ctx.getDataSeries();
-        // max days
         ZonedDateTime barStart1 = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(index)), ZoneId.of("UTC"));
-
         Instrument instrument = series.getInstrument();
-
         Sessions currentSession = null; //Sessions.RTH;
-
 
         long startOfDay = instrument.getStartOfDay(series.getStartTime(index), true);
 
-        // Set window based on bar time
+        // Set window based on bar time. Bars within the window will be used to calculate volume profile for the window
+        // Window to use to calculate volume and value area
+
+        ZonedDateTime windowStart;
+        ZonedDateTime windowEnd;
         if (instrument.isInsideTradingHours(series.getStartTime(index), true)) {
             currentSession = Sessions.RTH;
             windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startOfDay), ZoneId.of("UTC")).plusHours(4);
@@ -110,27 +106,18 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                     .minusDays(1).plusHours(11);
             windowEnd = windowStart.plusHours(6);
         }
-        if (null == lastSession) lastSession = currentSession;
-
 
         if (barStart1.isAfter(windowStart) && barStart1.isBefore(windowEnd)) {
             isBarInsideWindow = true;
-            Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)), Enums.MarkerType.ARROW);
-            arrow.setSize(Enums.Size.MEDIUM);
-            switch (currentSession) {
-                case RTH:
-                    arrow.setFillColor(Color.ORANGE);
-                    break;
-                case GLOBEX:
-                    arrow.setFillColor(Color.MAGENTA);
-                    break;
-                default:
-                    arrow.setFillColor(Color.DARK_GRAY);
+            if (getSettings().getBoolean("HighlightWindows", false)) {
+                Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)-2), Enums.MarkerType.TRIANGLE);
+                square.setSize(Enums.Size.MEDIUM);
+                square.setFillColor(currentSession == Sessions.RTH ? Color.ORANGE : Color.MAGENTA);
+                addFigure(Plot.PRICE, square);
             }
-            addFigure(Plot.PRICE, arrow);
-
 
             // Calculate volume by price
+
             SortedMap<Float, Integer> barVolumeByPrice = new TreeMap<>();
             TickOperation t = new TickOperation() {
                 @Override
@@ -199,22 +186,24 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                 }
 
                 float valueAreaPercent = (float) runningVolume / totalVolume;
-                if (valueAreaPercent > getSettings().getDouble("ValueAreaPercent")) break;
+                if (valueAreaPercent > (getSettings().getDouble("ValueAreaPercent")/100)) break;
             }
         } else {
             if (isBarInsideWindow) {
                 // first bar outside of window - draw pivots
-//                Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)-2), Enums.MarkerType.TRIANGLE);
-//                arrow.setSize(Enums.Size.VERY_LARGE);
-//                arrow.setFillColor(Color.RED);
-//                // debug - print volume by price
-//                StringBuilder text = new StringBuilder();
-//                for (Map.Entry<Float, Integer> entry : volumeByPrice.entrySet()) {
-//                    text.append(entry.getKey()).append(" ").append(entry.getValue()).append("\n");
-//                }
-//                arrow.setTextValue(text.toString());
-//                addFigure(Plot.PRICE, arrow);
 
+                // debug - print volume by price
+                if (getSettings().getBoolean("ShowVolumeByPrice", false)) {
+                    Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)-2), Enums.MarkerType.TRIANGLE);
+                    arrow.setSize(Enums.Size.LARGE);
+                    arrow.setFillColor(Color.RED);
+                    StringBuilder text = new StringBuilder("\n");
+                    for (Map.Entry<Float, Integer> entry : volumeByPrice.entrySet()) {
+                        text.append(entry.getKey()).append(" ").append(entry.getValue()).append("\n");
+                    }
+                    arrow.setTextValue(text.toString());
+                    addFigure(Plot.PRICE, arrow);
+                }
 
                 float vah = valueArea.lastKey();
                 float val = valueArea.firstKey();
@@ -222,6 +211,7 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                 float pivot = vah - ((vah - val) / 2);
                 debug("----------");
                 debug("currentSession: " + currentSession);
+                debug("Using value area percent: " + getSettings().getDouble("ValueAreaPercent"));
                 debug("Value Area Low: " + valueArea.firstKey());
                 debug("Value Area High: " + valueArea.lastKey());
                 debug("Value Area Mid (Pivot): " + pivot);
@@ -233,7 +223,7 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                 PathInfo lowExtensionPathInfo = settings.getPath("LowExtensionLine");
 
                 long lineStart = series.getStartTime(index); // this is first bar after window, use this as start
-                long lineEnd;// = lineStart + Util.MILLIS_IN_HOUR*4; // draw lines 4 hours long for now
+                long lineEnd;
 
                 if (instrument.isInsideTradingHours(series.getStartTime(index), true)) {
                     lineEnd = instrument.getEndOfDay(series.getStartTime(index), true);
@@ -245,17 +235,6 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                         .setColor(svpPivotPathInfo.getColor()).setFont(defaults.getFont()).setStroke(svpPivotPathInfo.getStroke())
                         .setText("SVP: " + pivot)
                         .build();
-
-                switch (currentSession) {
-                    case RTH:
-                        svpLine.setColor(Color.ORANGE);
-                        break;
-                    case GLOBEX:
-                        svpLine.setColor(Color.MAGENTA);
-                        break;
-                    default:
-                        svpLine.setColor(Color.DARK_GRAY);
-                }
                 addFigure(Plot.PRICE, svpLine);
 
                 // extensions
@@ -292,15 +271,11 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
                 addFigure(Plot.PRICE, svpLowExtensionLine1);
                 addFigure(Plot.PRICE, svpLowExtensionLine2);
 
-                calculating = false;
                 // re-initialize VBP and VA for next window calculation
                 volumeByPrice = new TreeMap<>();
                 valueArea = new TreeMap<>();
                 isBarInsideWindow = false;
             }
-            Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index)), Enums.MarkerType.SQUARE);
-            arrow.setSize(Enums.Size.MEDIUM);
-            addFigure(Plot.PRICE, arrow);
         }
     }
 
@@ -315,7 +290,7 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
     }
 
     /**
-     * Helper class for buidling lines to draw on the chart
+     * Builder class providing a fluent interface for building lines to draw on the chart
      */
     private static class LineBuilder {
         private final Coordinate coordinate1;
@@ -365,9 +340,10 @@ public class VolumePivots extends com.motivewave.platform.sdk.study.Study {
         }
     }
 
-    // Custom class to override the layout to position text where we want it
+    /**
+     * Custom Line class used to override the location of the line's text
+     */
     private static class MyLine extends Line {
-
         public MyLine(Coordinate var1, Coordinate var2) {
             super(var1, var2);
         }
