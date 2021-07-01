@@ -91,6 +91,34 @@ public class DeltaPivots2 extends com.motivewave.platform.sdk.study.Study {
         clearFigures();
     }
 
+    private interface WindowInterface {
+        public ZonedDateTime getStartTime();
+        public ZonedDateTime getEndTime();
+    }
+
+    private static class Window implements WindowInterface {
+        private final ZonedDateTime start;
+        private final ZonedDateTime end;
+        public Window(ZonedDateTime start, ZonedDateTime end) {
+            this.start = start;
+            this.end = end;
+        }
+        public ZonedDateTime getStartTime() {
+            return start;
+        }
+        public ZonedDateTime getEndTime() {
+            return end;
+        }
+
+        public static WindowInterface createWindowForInstrument(Sessions session, Instrument instrument) {
+            long startOfDay = instrument.getLastTimestamp(); // @todo this is wrong
+            ZonedDateTime windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startOfDay), ZoneId.of("UTC")).plusHours(4);
+
+            return new Window(windowStart, windowStart.plusHours(2).plusMinutes(20));
+        }
+    }
+
+
     @Override
     protected void calculate(int index, DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
@@ -179,6 +207,7 @@ public class DeltaPivots2 extends com.motivewave.platform.sdk.study.Study {
 //            debug("Calculated MAX rollingWindowDeltaSum: " + maxRollingWindowDeltaSum  + " starting at index " + maxRollingDeltaWindowDeltaStartIndex);
             series.setComplete(index);
         } else {
+            // Bar start is outside of the current window
             if (isBarInsideWindow) {
                 // first bar outside of window - draw pivots
 
@@ -288,6 +317,18 @@ public class DeltaPivots2 extends com.motivewave.platform.sdk.study.Study {
                         .setText("SDP: " + pivot)
                         .build();
                 addFigure(Plot.PRICE, SDPLine);
+
+//                Line SDPHigh = LineBuilder.create(lineStart, sdp.getHigh(), lineEnd)
+//                        .setColor(SDPPivotPathInfo.getColor()).setFont(defaults.getFont()).setStroke(SDPPivotPathInfo.getStroke())
+//                        .setText("SDP Low: " + sdp.getHigh())
+//                        .build();
+//                addFigure(Plot.PRICE, SDPHigh);
+//
+//                Line SDPLow = LineBuilder.create(lineStart, sdp.getLow(), lineEnd)
+//                        .setColor(SDPPivotPathInfo.getColor()).setFont(defaults.getFont()).setStroke(SDPPivotPathInfo.getStroke())
+//                        .setText("SDP High: " + sdp.getLow())
+//                        .build();
+//                addFigure(Plot.PRICE, SDPLow);
 
                 // extensions
                 float ext1a = sdp.getExtensionAbove(100);
