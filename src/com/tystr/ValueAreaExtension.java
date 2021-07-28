@@ -147,7 +147,7 @@ public class ValueAreaExtension extends Study
         long calculateAfter = instrument.getStartOfDay(Instant.now().minusSeconds(Util.SECONDS_IN_DAY*3).toEpochMilli(), true);
 
         // limit data
-//        if (startOfDay < calculateAfter) return;
+        if (startOfDay < calculateAfter) return;
 
         Sessions currentSession = null; //Sessions.RTH;
 
@@ -168,7 +168,7 @@ public class ValueAreaExtension extends Study
             windowEnd = windowStart.plusHours(6);
         }
 
-        if ((barStart1.isAfter(windowStart) || barStart1.isEqual(windowStart)) && barStart1.isBefore(windowEnd)) {
+        if (currentSession == Sessions.RTH && (barStart1.isAfter(windowStart) || barStart1.isEqual(windowStart)) && barStart1.isBefore(windowEnd)) {
             isBarInsideWindow = true;
             if (getSettings().getBoolean("HighlightWindows", false)) {
                 Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 2), Enums.MarkerType.TRIANGLE);
