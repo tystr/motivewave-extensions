@@ -158,6 +158,8 @@ public class ValueAreaExtension extends Study
 
         public void onTick(Tick tick) {
             if (tick.getTime() > series.getEndTime(nextIndex)) {
+                calculateValueArea();
+                notifyRedraw();
                 series.setComplete(nextIndex);
                 nextIndex++;
                 debug("advanced index to " + nextIndex);
@@ -198,7 +200,6 @@ public class ValueAreaExtension extends Study
             volumeByPrice.put(price, volume);
 
             if (volumeByPrice.isEmpty()) return;
-            calculateValueArea();
         }
 
         private void calculateValueArea() {
