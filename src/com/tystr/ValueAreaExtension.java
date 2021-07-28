@@ -89,12 +89,11 @@ public class ValueAreaExtension extends Study
         desc.exportValue(new ValueDescriptor(Values.VAL, "VAL", new String[] {"VAL_LINE"}));
         desc.exportValue(new ValueDescriptor(Values.VAL, "VA Mid", new String[] {"VALMID_LINE"}));
 
-        PathDescriptor vahLinePathDescriptor = new PathDescriptor("VAH_LINE", "VAH Line", null, 1.0f, null, true, true, false);
-        PathDescriptor valLinePathDescriptor = new PathDescriptor("VAL_LINE", "VAL Line", null, 1.0f, null, true, true, false);
-        PathDescriptor vah1LinePathDescriptor = new PathDescriptor("VAH_1_LINE", "VAH Ext 1 Line", null, 1.0f, null, true, true, false);
-        PathDescriptor val1LinePathDescriptor = new PathDescriptor("VAL_1_LINE", "VAL Ext 1 Line", null, 1.0f, null, true, true, false);
-
-        PathDescriptor vamidLinePathDescriptor = new PathDescriptor("VAMID_LINE", "VA Mid Line", null, 1.0f, null, true, true, false);
+        PathDescriptor vahLinePathDescriptor = new PathDescriptor("VAH_LINE", "VAH Line", null, 1.0f, null, true, true, true);
+        PathDescriptor valLinePathDescriptor = new PathDescriptor("VAL_LINE", "VAL Line", null, 1.0f, null, true, true, true);
+        PathDescriptor vah1LinePathDescriptor = new PathDescriptor("VAH_1_LINE", "VAH Ext 1 Line", null, 1.0f, null, true, true, true);
+        PathDescriptor val1LinePathDescriptor = new PathDescriptor("VAL_1_LINE", "VAL Ext 1 Line", null, 1.0f, null, true, true, true);
+        PathDescriptor vamidLinePathDescriptor = new PathDescriptor("VAMID_LINE", "VA Mid Line", null, 1.0f, null, true, true, true);
 
 
         vahLinePathDescriptor.setContinuous(false);
@@ -116,17 +115,11 @@ public class ValueAreaExtension extends Study
         desc.declarePath(Values.VAH_1, "VAH_1_LINE");
         desc.declarePath(Values.VAL_1, "VAL_1_LINE");
 
-
         desc.declarePath(Values.VA_PIVOT, "VAMID_LINE");
 
-        grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 70, 0, 100, 0.10));
+        grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 68.2, 0, 100, 0.10));
 
-
-
-        volumeByPrice = new TreeMap<>();
-        volumeByPriceByIndex = new TreeMap<>();
-
-
+        sd.addQuickSettings("VAH_LINE", "VAL_LINE", "VAH_1_LINE", "VAL_1_LINE", "VAMID_LINE", "ValueAreaPercent");
     }
 
     @Override
@@ -138,11 +131,8 @@ public class ValueAreaExtension extends Study
 
     @Override
     protected void calculateValues(DataContext ctx) {
-
         DataSeries series = ctx.getDataSeries();
         Instrument instrument = series.getInstrument();
-
-//        long start = instrument.getStartOfDay(Instant.now().minusSeconds(Util.SECONDS_IN_DAY*3).toEpochMilli(), true);
 
         int startIndex = series.size() - 1000;
         TickOperation calculator = new VPCalculator(startIndex, series);
@@ -157,15 +147,18 @@ public class ValueAreaExtension extends Study
         private SortedMap<Float, Integer> volumeByPrice;
         private boolean calculating = false;
 
+        private long nextEnd;
         public VPCalculator(int startIndex, DataSeries series) {
             this.startIndex = startIndex;
             this.series = series;
             this.nextIndex = startIndex;
             this.volumeByPrice = new TreeMap<>();
+            nextEnd = series.getInstrument().getEndOfDay(series.getStartTime(startIndex), rth);
         }
 
         public void onTick(Tick tick) {
             if (tick.getTime() > series.getEndTime(nextIndex)) {
+                series.setComplete(nextIndex);
                 nextIndex++;
                 debug("advanced index to " + nextIndex);
 
@@ -175,11 +168,13 @@ public class ValueAreaExtension extends Study
                 double val_1 = (double) series.getDouble(nextIndex, Values.VAL_1, 0d);
                 double pivot = (double) series.getDouble(nextIndex, Values.VA_PIVOT, 0d);
 
-                debug("Index " + nextIndex + ": VAH " + vah);
-                debug("Index " + nextIndex + ": VAL " + val);
-                debug("Index " + nextIndex + ": VA Breadth " + (vah - val));
-                debug("Index " + nextIndex + ": VA Pivot (mid)" + pivot);
+//                debug("Index " + nextIndex + ": VAH " + vah);
+//                debug("Index " + nextIndex + ": VAL " + val);
+//                debug("Index " + nextIndex + ": VA Breadth " + (vah - val));
+//                debug("Index " + nextIndex + ": VA Pivot (mid)" + pivot);
             }
+
+            if (series.isComplete(nextIndex)) return;
 
             Instrument instrument = series.getInstrument();
             if (rth && !instrument.isInsideTradingHours(tick.getTime(), rth)) {
@@ -188,6 +183,12 @@ public class ValueAreaExtension extends Study
                     calculating = false;
                 }
                 return;
+            }
+
+            // restart at beginning of session if consecutive
+            if (tick.getTime() > nextEnd) {
+                nextEnd = series.getInstrument().getEndOfDay(tick.getTime(), rth);
+                volumeByPrice.clear();
             }
             calculating = true;
 
@@ -250,7 +251,7 @@ public class ValueAreaExtension extends Study
                 }
 
                 float valueAreaPercent = (float) runningVolume / totalVolume;
-                if (valueAreaPercent > (getSettings().getDouble("ValueAreaPercent") / 100)) break;
+                if (valueAreaPercent >= (getSettings().getDouble("ValueAreaPercent") / 100)) break;
             }
 
             double vah = valueArea.lastKey();
@@ -266,193 +267,5 @@ public class ValueAreaExtension extends Study
             series.setDouble(nextIndex, Values.VAL_1, val_1);
             series.setDouble(nextIndex, Values.VA_PIVOT, pivot);
         }
-
-    }
-
-    /** This method calculates the moving average for the given index in the data series. */
-    protected void donotcallme(int index, DataContext ctx)
-    {
-
-        DataSeries series = ctx.getDataSeries();
-        ZonedDateTime barStart1 = ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(index)), ZoneId.of("UTC"));
-        Instrument instrument = series.getInstrument();
-
-        long startOfDay = instrument.getStartOfDay(series.getStartTime(index), true);
-        long calculateAfter = instrument.getStartOfDay(Instant.now().minusSeconds(Util.SECONDS_IN_DAY*3).toEpochMilli(), true);
-
-        // limit data
-        if (startOfDay < calculateAfter) return;
-
-        Sessions currentSession = null; //Sessions.RTH;
-
-        // Set window based on bar time. Bars within the window will be used to calculate volume profile for the window
-        // Window to use to calculate volume and value area
-
-        ZonedDateTime windowStart;
-        ZonedDateTime windowEnd;
-        if (instrument.isInsideTradingHours(series.getStartTime(index), true)) {
-            currentSession = Sessions.RTH;
-            windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startOfDay), ZoneId.of("UTC"));//.plusHours(4);
-            windowEnd = windowStart.plusHours(6).plusMinutes(30);
-        } else {
-            currentSession = Sessions.GLOBEX;
-            long startOfEveningSession = instrument.getStartOfEveningSession(series.getStartTime(index));
-            windowStart = ZonedDateTime.ofInstant(Instant.ofEpochMilli(startOfEveningSession), ZoneId.of("UTC"))
-                    .minusDays(1).plusHours(11);
-            windowEnd = windowStart.plusHours(6);
-        }
-
-        if (currentSession == Sessions.RTH && (barStart1.isAfter(windowStart) || barStart1.isEqual(windowStart)) && barStart1.isBefore(windowEnd)) {
-            isBarInsideWindow = true;
-            if (getSettings().getBoolean("HighlightWindows", false)) {
-                Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 2), Enums.MarkerType.TRIANGLE);
-                square.setSize(Enums.Size.MEDIUM);
-                square.setFillColor(currentSession == Sessions.RTH ? Color.ORANGE : Color.MAGENTA);
-                addFigure(Plot.PRICE, square);
-            }
-
-            // Calculate volume by price
-
-            SortedMap<Float, Integer> barVolumeByPrice = new TreeMap<>();
-            TickOperation t = new TickOperation() {
-                @Override
-                public void onTick(Tick tick) {
-                    float price = tick.isAskTick() ? tick.getAskPrice() : tick.getBidPrice();
-                    int volume = volumeByPrice.getOrDefault(price, 0);
-                    volume += tick.getVolume();
-                    volumeByPrice.put(price, volume);
-                    barVolumeByPrice.put(price, volume);
-                }
-            };
-//            Util.schedule(() -> {
-                instrument.forEachTick(series.getStartTime(index), series.getEndTime(index), t);
-//            });
-            series.setValue(index, "VolumeByPrice", barVolumeByPrice);
-            volumeByPriceByIndex.put(index, barVolumeByPrice);
-            series.setComplete(index);
-
-            // Calculate Value Area
-
-            float interval = (float) instrument.getTickSize();
-            float volumePOC = Collections.max(volumeByPrice.entrySet(), Map.Entry.comparingByValue()).getKey();
-            int totalVolume = volumeByPrice.values().stream().mapToInt(i -> i).sum();
-            int runningVolume = 0;
-
-            valueArea = new TreeMap<>(); // Reset Value Area
-
-            // Add volume POC to value area
-            valueArea.put(volumePOC, volumeByPrice.get(volumePOC));
-
-            float abovePrice1 = volumePOC + interval;
-            float abovePrice2 = volumePOC + (interval * 2);
-            float belowPrice1 = volumePOC; //- interval;
-            float belowPrice2 = volumePOC; // - (interval * 2);
-            boolean incrementAbove = false;
-            int aboveIncrements = 0;
-            int belowIncrements = -2;
-
-            for (int i = 1; i <= volumeByPrice.size(); i++) {
-                if (incrementAbove) {
-                    aboveIncrements = aboveIncrements + 2;
-                    abovePrice1 = volumePOC + (interval * (aboveIncrements + 1));
-                    abovePrice2 = volumePOC + (interval * (aboveIncrements + 2));
-                } else {
-                    belowIncrements = belowIncrements + 2;
-                    belowPrice1 = volumePOC - (interval * (belowIncrements + 1));
-                    belowPrice2 = volumePOC - (interval * (belowIncrements + 2));
-                }
-
-                int abovePrice1Volume = volumeByPrice.getOrDefault(abovePrice1, 0);
-                int abovePrice2Volume = volumeByPrice.getOrDefault(abovePrice2, 0);
-                int belowPrice1Volume = volumeByPrice.getOrDefault(belowPrice1, 0);
-                int belowPrice2Volume = volumeByPrice.getOrDefault(belowPrice2, 0);
-
-                int aboveSum = abovePrice1Volume + abovePrice2Volume;
-                int belowSum = belowPrice1Volume + belowPrice2Volume;
-
-                if (aboveSum > belowSum) {
-                    incrementAbove = true;
-                    valueArea.put(abovePrice1, abovePrice1Volume);
-                    valueArea.put(abovePrice2, abovePrice2Volume);
-                    runningVolume += abovePrice1Volume + abovePrice2Volume;
-                } else {
-                    incrementAbove = false;
-                    valueArea.put(belowPrice1, belowPrice1Volume);
-                    valueArea.put(belowPrice2, belowPrice2Volume);
-                    runningVolume += belowPrice1Volume + belowPrice2Volume;
-                }
-
-                float valueAreaPercent = (float) runningVolume / totalVolume;
-                if (valueAreaPercent > (getSettings().getDouble("ValueAreaPercent") / 100)) break;
-            }
-
-            double vah = valueArea.lastKey();
-            double val = valueArea.firstKey();
-            double breadth = vah - val;
-            double pivot = vah - (breadth / 2);
-            double vah_1 = vah + breadth;
-            double val_1 = val - breadth;
-
-            series.setDouble(index, Values.VAH, vah);
-            series.setDouble(index, Values.VAL,  val);
-            series.setDouble(index, Values.VAH_1, vah_1);
-            series.setDouble(index, Values.VAL_1, val_1);
-            series.setDouble(index, Values.VA_PIVOT, pivot);
-
-
-            debug("Index " + index + ": VAH " + vah);
-            debug("Index " + index + ": VAL " + val);
-            debug("Index " + index + ": VA Breadth " + breadth);
-            debug("Index " + index + ": VA Pivot (mid)" + pivot);
-
-        } else {
-            volumeByPrice.clear();
-            volumeByPriceByIndex.clear();
-            // to prevent null pointer exception
-//            series.setDouble(index, Values.VAH, 0d);
-//            series.setDouble(index, Values.VAL, 0d);
-
-        }
-
-
-
-
-
-
-
-
-
-        // Get the settings as defined by the user in the study dialog
-        // getSettings() returns a Settings object that contains all
-        // of the settings that were configured by the user.
-        Object input = getSettings().getInput(Inputs.INPUT);
-        int period = getSettings().getInteger(Inputs.PERIOD);
-
-        // In order to calculate the exponential moving average
-        // we need at least 'period' points of data
-        if (index < period) return;
-
-        // Get access to the data series.
-        // This interface provides access to the historical data as well
-        // as utility methods to make this calculation easier.
-//        var series = ctx.getDataSeries();
-
-        // This utility method allows us to calculate the Exponential
-        // Moving Average instead of doing this ourselves.
-        // The DataSeries interface contains several of these types of methods.
-        Double average1 = series.ema(index, period, input);
-        Double average2 = series.sma(index, period, input);
-        if (average1 == null || average2 == null) return;
-
-        double ma = average1;
-        ma = (average1 + average2)/2;
-
-        // Calculated values are stored in the data series using
-        // a key (Values.MA).  The key can be any unique value, but
-        // we recommend using an enumeration to organize these within
-        // your class.  Notice that in the initialize method we declared
-        // a path using this key.
-        //debug("Setting MA value for index: " + index + " average: " + ma);
-        series.setDouble(index, Values.MA, ma);
     }
 }
