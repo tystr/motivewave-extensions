@@ -6,6 +6,7 @@ import com.motivewave.platform.sdk.draw.Marker;
 import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
+import com.motivewave.platform.study.ma.VWAP;
 
 import java.awt.*;
 import java.time.Instant;
@@ -134,9 +135,142 @@ public class ValueAreaExtension extends Study
         return getSettings().getInteger(Inputs.PERIOD)*2;
     }
 
-    /** This method calculates the moving average for the given index in the data series. */
+
     @Override
-    protected void calculate(int index, DataContext ctx)
+    protected void calculateValues(DataContext ctx) {
+
+        DataSeries series = ctx.getDataSeries();
+        Instrument instrument = series.getInstrument();
+
+//        long start = instrument.getStartOfDay(Instant.now().minusSeconds(Util.SECONDS_IN_DAY*3).toEpochMilli(), true);
+
+        int startIndex = series.size() - 1000;
+        TickOperation calculator = new VPCalculator(startIndex, series);
+        instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+    }
+
+    class VPCalculator implements TickOperation {
+        private final DataSeries series;
+        private int startIndex;
+        private int nextIndex;
+        private final boolean rth = true;
+        private SortedMap<Float, Integer> volumeByPrice;
+        private boolean calculating = false;
+
+        public VPCalculator(int startIndex, DataSeries series) {
+            this.startIndex = startIndex;
+            this.series = series;
+            this.nextIndex = startIndex;
+            this.volumeByPrice = new TreeMap<>();
+        }
+
+        public void onTick(Tick tick) {
+            if (tick.getTime() > series.getEndTime(nextIndex)) {
+                nextIndex++;
+                debug("advanced index to " + nextIndex);
+
+                double vah = (double) series.getDouble(nextIndex, Values.VAH, 0d);
+                double val = (double) series.getDouble(nextIndex, Values.VAL, 0d);
+                double vah_1 = (double) series.getDouble(nextIndex, Values.VAH_1, 0d);
+                double val_1 = (double) series.getDouble(nextIndex, Values.VAL_1, 0d);
+                double pivot = (double) series.getDouble(nextIndex, Values.VA_PIVOT, 0d);
+
+                debug("Index " + nextIndex + ": VAH " + vah);
+                debug("Index " + nextIndex + ": VAL " + val);
+                debug("Index " + nextIndex + ": VA Breadth " + (vah - val));
+                debug("Index " + nextIndex + ": VA Pivot (mid)" + pivot);
+            }
+
+            Instrument instrument = series.getInstrument();
+            if (rth && !instrument.isInsideTradingHours(tick.getTime(), rth)) {
+                if  (calculating) {
+                    volumeByPrice.clear();
+                    calculating = false;
+                }
+                return;
+            }
+            calculating = true;
+
+            float price = tick.isAskTick() ? tick.getAskPrice() : tick.getBidPrice();
+            int volume = volumeByPrice.getOrDefault(price, 0);
+            volume += tick.getVolume();
+            volumeByPrice.put(price, volume);
+
+            if (volumeByPrice.isEmpty()) return;
+            calculateValueArea();
+        }
+
+        private void calculateValueArea() {
+            float interval = (float) series.getInstrument().getTickSize();
+            float volumePOC = Collections.max(volumeByPrice.entrySet(), Map.Entry.comparingByValue()).getKey();
+            int totalVolume = volumeByPrice.values().stream().mapToInt(i -> i).sum();
+            int runningVolume = 0;
+            valueArea = new TreeMap<>(); // Reset Value Area
+
+            // Add volume POC to value area
+            valueArea.put(volumePOC, volumeByPrice.get(volumePOC));
+
+            float abovePrice1 = volumePOC + interval;
+            float abovePrice2 = volumePOC + (interval * 2);
+            float belowPrice1 = volumePOC; //- interval;
+            float belowPrice2 = volumePOC; // - (interval * 2);
+            boolean incrementAbove = false;
+            int aboveIncrements = 0;
+            int belowIncrements = -2;
+
+            for (int i = 1; i <= volumeByPrice.size(); i++) {
+                if (incrementAbove) {
+                    aboveIncrements = aboveIncrements + 2;
+                    abovePrice1 = volumePOC + (interval * (aboveIncrements + 1));
+                    abovePrice2 = volumePOC + (interval * (aboveIncrements + 2));
+                } else {
+                    belowIncrements = belowIncrements + 2;
+                    belowPrice1 = volumePOC - (interval * (belowIncrements + 1));
+                    belowPrice2 = volumePOC - (interval * (belowIncrements + 2));
+                }
+
+                int abovePrice1Volume = volumeByPrice.getOrDefault(abovePrice1, 0);
+                int abovePrice2Volume = volumeByPrice.getOrDefault(abovePrice2, 0);
+                int belowPrice1Volume = volumeByPrice.getOrDefault(belowPrice1, 0);
+                int belowPrice2Volume = volumeByPrice.getOrDefault(belowPrice2, 0);
+
+                int aboveSum = abovePrice1Volume + abovePrice2Volume;
+                int belowSum = belowPrice1Volume + belowPrice2Volume;
+
+                if (aboveSum > belowSum) {
+                    incrementAbove = true;
+                    valueArea.put(abovePrice1, abovePrice1Volume);
+                    valueArea.put(abovePrice2, abovePrice2Volume);
+                    runningVolume += abovePrice1Volume + abovePrice2Volume;
+                } else {
+                    incrementAbove = false;
+                    valueArea.put(belowPrice1, belowPrice1Volume);
+                    valueArea.put(belowPrice2, belowPrice2Volume);
+                    runningVolume += belowPrice1Volume + belowPrice2Volume;
+                }
+
+                float valueAreaPercent = (float) runningVolume / totalVolume;
+                if (valueAreaPercent > (getSettings().getDouble("ValueAreaPercent") / 100)) break;
+            }
+
+            double vah = valueArea.lastKey();
+            double val = valueArea.firstKey();
+            double breadth = vah - val;
+            double pivot = vah - (breadth / 2);
+            double vah_1 = vah + breadth;
+            double val_1 = val - breadth;
+
+            series.setDouble(nextIndex, Values.VAH, vah);
+            series.setDouble(nextIndex, Values.VAL,  val);
+            series.setDouble(nextIndex, Values.VAH_1, vah_1);
+            series.setDouble(nextIndex, Values.VAL_1, val_1);
+            series.setDouble(nextIndex, Values.VA_PIVOT, pivot);
+        }
+
+    }
+
+    /** This method calculates the moving average for the given index in the data series. */
+    protected void donotcallme(int index, DataContext ctx)
     {
 
         DataSeries series = ctx.getDataSeries();
