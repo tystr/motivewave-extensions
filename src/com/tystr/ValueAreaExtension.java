@@ -106,6 +106,8 @@ public class ValueAreaExtension extends Study
         }
 
         public void onTick(Tick tick) {
+            if (series.isComplete(nextIndex)) return; // nothing to do if this index is complete
+
             if (tick.getTime() > series.getEndTime(nextIndex)) {
                 if (!volumeByPrice.isEmpty()) {
                     calculateValueArea();
@@ -114,8 +116,6 @@ public class ValueAreaExtension extends Study
                 }
                 nextIndex++;
             }
-
-            if (series.isComplete(nextIndex)) return;
 
             Instrument instrument = series.getInstrument();
             if (rth && !instrument.isInsideTradingHours(tick.getTime(), rth)) {
@@ -140,8 +140,6 @@ public class ValueAreaExtension extends Study
             int volume = volumeByPrice.getOrDefault(price, 0);
             volume += tick.getVolume();
             volumeByPrice.put(price, volume);
-
-            if (volumeByPrice.isEmpty()) return;
         }
 
         private long getEndForTimeframe(String timeframe) {
