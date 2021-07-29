@@ -1,102 +1,111 @@
-package study_examples;
+package com.tystr;
 
 import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
-import com.motivewave.platform.sdk.study.RuntimeDescriptor;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
 
-import java.awt.*;
-import java.util.List;
-
-/** Simple MACD example.  This example shows how to create a Study Graph
- that is based on the MACD study.  For simplicity code from the
- MotiveWave MACD study has been removed or altered. */
 @StudyHeader(
         namespace="com.tystr",
-        id="DeltaCandleColor",
+        id="DELTA_CANDLE_COLOR",
+//        rb="study_examples.nls.strings", // locale specific strings are loaded from here
         name="Delta Candle Color",
-        desc="This study colors candles with high deltas",
-        menu="Examples",
-        overlay=true)
+        label="Delta Candle Color",
+        desc="This study colors candles based on configured delta thresholds.",
+        menu="Tystr",
+        overlay=true,
+        studyOverlay=true,
+        requiresVolume = true
+)
 public class DeltaCandleColor extends Study
 {
-    // This enumeration defines the variables that we are going to store in the Data Series
-    enum Values { MACD, SIGNAL, HIST };
-    final static String HIST_IND = "histInd"; // Histogram Parameter
+    enum Values { DELTA };
 
-    /** This method initializes the settings and defines the runtime settings. */
     @Override
     public void initialize(Defaults defaults)
     {
-        // Define the settings for this study
-        // We are creating 2 tabs: 'General' and 'Display'
         var sd = createSD();
         var tab = sd.addTab("General");
 
-        // Define the 'Inputs'
-        var grp = tab.addGroup("Inputs");
-        grp.addRow(new InputDescriptor(Inputs.INPUT, "Input", Enums.BarInput.CLOSE));
-        grp.addRow(new IntegerDescriptor("PositiveDeltaThreshold", "Positive Threshold", 1000, 1, 9999, 1));
-        grp.addRow(new ColorDescriptor("PositiveDeltaColor", "Positive Delta Candle Color", Color.GREEN));
-        grp.addRow(new IntegerDescriptor("NegativeDeltaThreshold", "Negative Threshold", 1000, 1, 9999, 1));
-        grp.addRow(new ColorDescriptor("NegativeDeltaColor", "Negative Delta Candle Color", Color.RED));
+        var grp = tab.addGroup("Display");
+        grp.addRow(new IntegerDescriptor("PositiveDeltaThreshold", "Positive Threshold", 100, 0, Integer.MAX_VALUE, 1));
+        grp.addRow(new ColorDescriptor("PositiveDeltaColor", "Positive Delta Candle Color", defaults.getGreen()));
+        grp.addRow(new IntegerDescriptor("NegativeDeltaThreshold", "Negative Threshold", -100, Integer.MIN_VALUE, 0, 1));
+        grp.addRow(new ColorDescriptor("NegativeDeltaColor", "Negative Delta Candle Color", defaults.getRed()));
+        grp.addRow(new ColorDescriptor("NeutralDeltaColor", "Neutral Delta Candle Color", defaults.getYellow()));
     }
 
-    /** This method calculates the MACD values for the data at the given index. */
     @Override
-    protected void calculate(int index, DataContext ctx)
-    {
-        int MAX_BARS = 500; // todo make this confiugrable
-
+    protected void calculateValues(DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
-        if (index < series.size() - MAX_BARS) {
-            return;
-        }
-        debug("DataSeries size: " + series.size());
-//        if (!series.isComplete(index)) {
-//            return;
-//        }
-        Settings settings = getSettings();
-        Color positiveDeltaColor = settings.getColor("PositiveDeltaColor");
-        List<Tick> ticks = ctx.getInstrument().getTicks(series.getStartTime(index), series.getEndTime(index));
-        int delta = series.getInt(index, "Delta");
-        if (!series.isComplete(index)) {
-            delta = getDeltaForTicks(ticks);
-            debug("calculated delta " + delta + " for index " + index);
-            series.setInt(index, "Delta", delta);
-            series.setComplete(index);
-        } else {
-            debug("found delta " + delta + " for index " + index);
-        }
-        //debug("delta for index " + index + ": " + delta);
+        Instrument instrument = series.getInstrument();
 
-        int positiveDeltaThreshold = settings.getInteger("PositiveDeltaThreshold", 1000);
-        int negativeDeltaThreshold = - settings.getInteger("NegativeDeltaThreshold", 1000);
-        debug("Using positive threshold " + positiveDeltaThreshold);
-        debug("Using negative threshold " + negativeDeltaThreshold);
-        if (delta > positiveDeltaThreshold) {
-            series.setPriceBarColor(index, positiveDeltaColor);
-        } else if (delta < negativeDeltaThreshold) {
-            series.setPriceBarColor(index, settings.getColor("NegativeDeltaColor"));
+        int maxDays = 10; // @todo configure this
+        int startIndex = 1;
+        long threshold = instrument.getStartOfDay(series.getStartTime(), ctx.isRTH()) - ((maxDays+1) * Util.MILLIS_IN_DAY);
+        for (int i = series.size()-1; i > 0; i--) {
+            startIndex = i;
+            if (series.getStartTime(i) < threshold) break;
         }
+        TickOperation calculator = new DeltaCalculator(startIndex, series, ctx.getDefaults());
+        instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
     }
 
-    /**
-     * Calculates the delta between bid and ask volume for the given list of ticks
-     *
-     * @param ticks A List of ticks over which delta is to be calculated
-     * @return The delta
-     */
-    protected int getDeltaForTicks(List<Tick> ticks) {
-        int delta = 0;
-        for (Tick tick : ticks) {
-            if (tick.isAskTick()) {
-                delta += tick.getVolume();
-            } else
-                delta -= tick.getVolume();
+    class DeltaCalculator implements TickOperation {
+        private final DataSeries series;
+        private int nextIndex;
+        private final boolean rth = true;
+        private int totalDelta = 0;
+        private boolean calculating = false;
+        private final Defaults defaults;
+
+        private long nextEnd;
+        public DeltaCalculator(int startIndex, DataSeries series, Defaults defaults) {
+            this.series = series;
+            this.nextIndex = startIndex;
+            nextEnd = series.getEndTime(startIndex);
+            this.defaults = defaults;
         }
 
-        return delta;
+        public void onTick(Tick tick) {
+            if (series.isComplete(nextIndex)) return; // nothing to do if this index is complete
+
+            if (tick.getTime() > series.getEndTime(nextIndex)) { // Bar is complete, set color and reset delta
+                if (series.getInt(nextIndex, Values.DELTA) > getSettings().getInteger("PositiveDeltaThreshold")) {
+                    series.setPriceBarColor(nextIndex, getSettings().getColor("PositiveDeltaColor"));
+                } else if (series.getInt(nextIndex, Values.DELTA) < getSettings().getInteger("NegativeDeltaThreshold")) {
+                    series.setPriceBarColor(nextIndex, getSettings().getColor("NegativeDeltaColor"));
+                } else {
+                    series.setPriceBarColor(nextIndex, getSettings().getColor("NeutralDeltaColor"));
+                }
+                notifyRedraw();
+                series.setComplete(nextIndex);
+                totalDelta = 0;
+                nextIndex++;
+                nextEnd = series.getEndTime(nextIndex);
+            }
+
+            calculating = true;
+
+            if (tick.isAskTick()) {
+                totalDelta += tick.getVolume();
+            } else {
+                totalDelta -= tick.getVolume();
+            }
+            series.setInt(nextIndex, Values.DELTA, totalDelta);
+        }
+
+        private long getEndForTimeframe(String timeframe, long time) {
+            switch (timeframe) {
+                case "Daily":
+                    debug("using daily");
+                    return series.getInstrument().getEndOfDay(time, rth);
+                case "Weekly":
+                    debug("using weekly");
+                    return series.getInstrument().getEndOfWeek(time, rth);
+                default:
+                    throw new RuntimeException("Timeframe must be one of \"Daily\" or \"Weekly\", received \"" + timeframe + "\".");
+            }
+        }
     }
 }
