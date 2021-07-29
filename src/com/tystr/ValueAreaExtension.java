@@ -154,6 +154,8 @@ public class ValueAreaExtension extends Study
             this.nextIndex = startIndex;
             this.volumeByPrice = new TreeMap<>();
             nextEnd = series.getInstrument().getEndOfDay(series.getStartTime(startIndex), rth);
+            // weekly
+            nextEnd = series.getInstrument().getEndOfWeek(series.getStartTime(startIndex), rth);
         }
 
         public void onTick(Tick tick) {
@@ -189,7 +191,10 @@ public class ValueAreaExtension extends Study
 
             // restart at beginning of session if consecutive
             if (tick.getTime() > nextEnd) {
-                nextEnd = series.getInstrument().getEndOfDay(tick.getTime(), rth);
+//                nextEnd = series.getInstrument().getEndOfDay(tick.getTime(), rth);
+                // if weekly
+                nextEnd = series.getInstrument().getEndOfWeek(tick.getTime(), rth);
+
                 volumeByPrice.clear();
             }
             calculating = true;
