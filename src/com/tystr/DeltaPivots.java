@@ -48,9 +48,9 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
         var tab = sd.addTab("General");
 
         var grp = tab.addGroup("");
-        grp.addRow(new PathDescriptor("PivotLine", "Pivot Line", Color.ORANGE, 1.0f, null, true, false, false));
-        grp.addRow(new PathDescriptor("HighExtensionLine", "High Extensions", Color.BLUE, 1.0f, null, true, false, false));
-        grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", Color.RED, 1.0f, null, true, false, false));
+        grp.addRow(new PathDescriptor("PivotLine", "Pivot Line", defaults.getYellowLine(), 1.0f, null, true, false, false));
+        grp.addRow(new PathDescriptor("HighExtensionLine", "High Extensions", defaults.getBlueLine(), 1.0f, null, true, false, false));
+        grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", defaults.getRedLine(), 1.0f, null, true, false, false));
         grp.addRow(new InputDescriptor("SessionInput", "Session", new String[]{SESSION_RTH, SESSION_JPY, SESSION_LONDON}, SESSION_RTH));
 
         grp.addRow(new BooleanDescriptor("HighlightBarsLines", "Show Lines for Developing SDP", false));
@@ -247,7 +247,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
             if (series.getHigh(i) > rollingWindowHigh) rollingWindowHigh = series.getHigh(i);
             if (series.getLow(i) < rollingWindowLow) rollingWindowLow = series.getLow(i);
             if (getSettings().getBoolean("HighlightBars", false)) {
-                series.setPriceBarColor(i, Color.GREEN);
+                series.setPriceBarColor(i, defaults.getGreen());
             }
         }
 
@@ -270,7 +270,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
 
         // Color SDP bar
         if (getSettings().getBoolean("HighlightBars", false)) {
-            series.setPriceBarColor(sdpIndex, Color.GREEN);
+            series.setPriceBarColor(sdpIndex, defaults.getGreen());
         }
 
         return new SessionDeltaPivot(
@@ -294,7 +294,7 @@ public class DeltaPivots extends com.motivewave.platform.sdk.study.Study {
     private void addFiguresForSessionDeltaPivot(SessionDeltaPivot sdp, Defaults defaults) {
         Marker sdpArrow = new Marker(new Coordinate(sdp.getStartTime(), sdp.getPivot() - 8), Enums.MarkerType.ARROW);
         sdpArrow.setSize(Enums.Size.MEDIUM);
-        sdpArrow.setFillColor(Color.ORANGE);
+        sdpArrow.setFillColor(defaults.getOrange());
 
         long sdpStartTime = sdp.getStartTime();
         long end = sdp.getEndOfDay();
