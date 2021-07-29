@@ -52,8 +52,8 @@ public class RetraceZones extends Study
         var colors = tab.addGroup(get("Colors"));
 //        colors.addRow(new PathDescriptor(Inputs.PATH, get("Line"), defaults.getLineColor(), 1.0f, null, true, false, false));
         //colors.addRow(new PathDescriptor(RETRACE_LINE, get("Retrace Line"), defaults.getLineColor(), 1.0f, new float[] {3f, 3f}, true, false, true));
-        colors.addRow(new ColorDescriptor(REBID_COLOR, get("Rebid Zone"), Color.BLUE.darker()));
-        colors.addRow(new ColorDescriptor(REOFFER_COLOR, get("Reoffer Zone"), Color.RED.darker().darker().darker()));
+        colors.addRow(new ColorDescriptor(REBID_COLOR, get("Rebid Zone"), defaults.getBlue()));
+        colors.addRow(new ColorDescriptor(REOFFER_COLOR, get("Reoffer Zone"), defaults.getRed()));
 
         // Quick Settings (Tool Bar and Popup Editor)
         //sd.addQuickSettings(HIGH_INPUT, LOW_INPUT, REVERSAL_TICKS, USE_TICKS, REVERSAL, PRICE_MOVEMENTS, PRICE_LABELS, Inputs.FONT, Inputs.PATH, RETRACE_LINE);
