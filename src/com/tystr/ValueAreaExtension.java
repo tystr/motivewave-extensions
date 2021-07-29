@@ -81,7 +81,13 @@ public class ValueAreaExtension extends Study
         DataSeries series = ctx.getDataSeries();
         Instrument instrument = series.getInstrument();
 
-        int startIndex = series.size() - 1000; // @todo hack for now to limit data - configure this?
+        int maxDays = 10; // @todo configure this
+        int startIndex = 1;
+        long threshold = instrument.getStartOfDay(series.getStartTime(), ctx.isRTH()) - ((maxDays+1) * Util.MILLIS_IN_DAY);
+        for (int i = series.size()-1; i > 0; i--) {
+            startIndex = i;
+            if (series.getStartTime(i) < threshold) break;
+        }
         TickOperation calculator = new VPCalculator(startIndex, series);
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
     }
