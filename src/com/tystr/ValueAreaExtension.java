@@ -5,7 +5,6 @@ import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
 
-import java.awt.*;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -114,18 +113,6 @@ public class ValueAreaExtension extends Study
                     series.setComplete(nextIndex);
                 }
                 nextIndex++;
-//                debug("advanced index to " + nextIndex);
-
-                double vah = (double) series.getDouble(nextIndex, Values.VAH, 0d);
-                double val = (double) series.getDouble(nextIndex, Values.VAL, 0d);
-                double vah_1 = (double) series.getDouble(nextIndex, Values.VAH_1, 0d);
-                double val_1 = (double) series.getDouble(nextIndex, Values.VAL_1, 0d);
-                double pivot = (double) series.getDouble(nextIndex, Values.VA_PIVOT, 0d);
-
-//                debug("Index " + nextIndex + ": VAH " + vah);
-//                debug("Index " + nextIndex + ": VAL " + val);
-//                debug("Index " + nextIndex + ": VA Breadth " + (vah - val));
-//                debug("Index " + nextIndex + ": VA Pivot (mid)" + pivot);
             }
 
             if (series.isComplete(nextIndex)) return;
@@ -139,7 +126,7 @@ public class ValueAreaExtension extends Study
                 return;
             }
 
-            // restart at beginning of session if consecutive
+            // reset if after end of timeframe (daily, weekly, etc)
             if (tick.getTime() > nextEnd) {
                 nextEnd = series.getInstrument().getEndOfDay(tick.getTime(), rth);
                 // if weekly
@@ -168,6 +155,10 @@ public class ValueAreaExtension extends Study
             }
         }
 
+        /**
+         * Calculates Value Area
+         * @link <a href="https://www.oreilly.com/library/view/mind-over-markets/9781118659762/b01.html">Volume Value-Area Calculation</a>
+         */
         private void calculateValueArea() {
             TreeMap<Float, Integer> valueArea = new TreeMap<>(); // Reset Value Area
 
