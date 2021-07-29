@@ -2,17 +2,12 @@ package com.tystr;
 
 import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
-import com.motivewave.platform.sdk.draw.Marker;
-import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
-import com.motivewave.platform.study.ma.VWAP;
 
 import java.awt.*;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -31,110 +26,63 @@ import java.util.TreeMap;
 )
 public class ValueAreaExtension extends Study
 {
-    enum Values { MA, VAH, VAL, VAH_1, VAH_2, VAL_1, VAL_2, VA_PIVOT };
-    enum Sessions { RTH, GLOBEX };
+    enum Values { MA, VAH, VAL, VAH_1, VAH_2, VAL_1, VAL_2, VA_PIVOT, TIMEFRAME};
 
-    private SortedMap<Float, Integer> volumeByPrice;
-    private SortedMap<Integer, SortedMap<Float, Integer>> volumeByPriceByIndex;
-
-    private SortedMap<Float, Integer> valueArea;
-    private boolean isBarInsideWindow = false;
-
-
-    /** This method initializes the study by doing the following:
-     1. Define Settings (Design Time Information)
-     2. Define Runtime Information (Label, Path and Exported Value) */
     @Override
     public void initialize(Defaults defaults)
     {
-        // Describe the settings that may be configured by the user.
-        // Settings may be organized using a combination of tabs and groups.
         var sd = createSD();
         var tab = sd.addTab("General");
+        SettingGroup grp = tab.addGroup("Display");
 
-        var grp = tab.addGroup(get("LBL_INPUTS"));
-        // Declare the inputs that are used to calculate the moving average.
-        // Note: the 'Inputs' class defines several common input keys.
-        // You can use any alpha-numeric string that you like.
-        grp.addRow(new InputDescriptor(Inputs.INPUT, get("Input"), Enums.BarInput.CLOSE));
-        grp.addRow(new IntegerDescriptor(Inputs.PERIOD, get("Period"), 20, 1, 9999, 1));
-
-        grp = tab.addGroup("Display");
-        // Allow the user to change the settings for the path that will
-        // draw the moving average on the graph.  In this case, we are going
-        // to use the input key Inputs.PATH
-        grp.addRow(new PathDescriptor(Inputs.PATH, get("Path"), null, 1.0f, null, true, true, false));
-
-        // Describe the runtime settings using a 'RuntimeDescriptor'
         var desc = createRD();
 
-        // Describe how to create the label.  The label uses the
-        // 'label' attribute in the StudyHeader (see above) and adds the input values
-        // defined below to generate a label.
-//        desc.setLabelSettings(Inputs.INPUT, Inputs.PERIOD);
-        // Exported values can be used to display cursor data
-        // as well as provide input parameters for other studies,
-        // generate alerts or scan for study patterns (see study scanner).
-//        desc.exportValue(new ValueDescriptor(Values.MA, get("My MA"),
-//                new String[] {Inputs.INPUT, Inputs.PERIOD}));
-        // MotiveWave will automatically draw a path using the path settings
-        // (described above with the key 'Inputs.LINE')  In this case
-        // it will use the values generated in the 'calculate' method
-        // and stored in the data series using the key 'Values.MA'
-//        desc.declarePath(Values.MA, Inputs.PATH);
+        List<NVP> timeframes = List.of(
+                new NVP("Daily", "Daily"),
+                new NVP("Weekly", "Weekly")
+        );
 
-
+        grp.addRow(new DiscreteDescriptor("Timeframe", "Timeframe", "Daily", timeframes));
 
         desc.exportValue(new ValueDescriptor(Values.VAH, "VAH", new String[] {"VAH_LINE"}));
         desc.exportValue(new ValueDescriptor(Values.VAL, "VAL", new String[] {"VAL_LINE"}));
         desc.exportValue(new ValueDescriptor(Values.VAL, "VA Mid", new String[] {"VALMID_LINE"}));
 
-        PathDescriptor vahLinePathDescriptor = new PathDescriptor("VAH_LINE", "VAH Line", null, 1.0f, null, true, true, true);
-        PathDescriptor valLinePathDescriptor = new PathDescriptor("VAL_LINE", "VAL Line", null, 1.0f, null, true, true, true);
-        PathDescriptor vah1LinePathDescriptor = new PathDescriptor("VAH_1_LINE", "VAH Ext 1 Line", null, 1.0f, null, true, true, true);
-        PathDescriptor val1LinePathDescriptor = new PathDescriptor("VAL_1_LINE", "VAL Ext 1 Line", null, 1.0f, null, true, true, true);
-        PathDescriptor vamidLinePathDescriptor = new PathDescriptor("VAMID_LINE", "VA Mid Line", null, 1.0f, null, true, true, true);
+        PathDescriptor vahLinePathDescriptor = new PathDescriptor("VAH_LINE", "VAH Line", defaults.getBlueLine(), 1.0f, null, true, true, true);
+        PathDescriptor valLinePathDescriptor = new PathDescriptor("VAL_LINE", "VAL Line", defaults.getRedLine(), 1.0f, null, true, true, true);
+        PathDescriptor vah1LinePathDescriptor = new PathDescriptor("VAH_1_LINE", "VAH Ext 1 Line", defaults.getBlueLine(), 1.0f, null, true, true, true);
+        PathDescriptor val1LinePathDescriptor = new PathDescriptor("VAL_1_LINE", "VAL Ext 1 Line", defaults.getRedLine(), 1.0f, null, true, true, true);
+        PathDescriptor vamidLinePathDescriptor = new PathDescriptor("VAMID_LINE", "VA Mid Line", defaults.getYellowLine(), 1.0f, null, true, true, true);
 
-
+        // Make sure these are set to continuous = false so the study is not drown for bars for which there is no data (e.g. ETH bars when plotting RTH data only)
         vahLinePathDescriptor.setContinuous(false);
         valLinePathDescriptor.setContinuous(false);
         vah1LinePathDescriptor.setContinuous(false);
         val1LinePathDescriptor.setContinuous(false);
-
         vamidLinePathDescriptor.setContinuous(false);
 
         grp.addRow(vahLinePathDescriptor);
         grp.addRow(valLinePathDescriptor);
         grp.addRow(vah1LinePathDescriptor);
         grp.addRow(val1LinePathDescriptor);
-
         grp.addRow(vamidLinePathDescriptor);
+        grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 68.2, 0, 100, 0.10));
 
         desc.declarePath(Values.VAH, "VAH_LINE");
         desc.declarePath(Values.VAL, "VAL_LINE");
         desc.declarePath(Values.VAH_1, "VAH_1_LINE");
         desc.declarePath(Values.VAL_1, "VAL_1_LINE");
-
         desc.declarePath(Values.VA_PIVOT, "VAMID_LINE");
-
-        grp.addRow(new DoubleDescriptor("ValueAreaPercent", "Value Area", 68.2, 0, 100, 0.10));
 
         sd.addQuickSettings("VAH_LINE", "VAL_LINE", "VAH_1_LINE", "VAL_1_LINE", "VAMID_LINE", "ValueAreaPercent");
     }
-
-    @Override
-    public int getMinBars()
-    {
-        return getSettings().getInteger(Inputs.PERIOD)*2;
-    }
-
 
     @Override
     protected void calculateValues(DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
         Instrument instrument = series.getInstrument();
 
-        int startIndex = series.size() - 1000;
+        int startIndex = series.size() - 1000; // @todo hack for now to limit data - configure this?
         TickOperation calculator = new VPCalculator(startIndex, series);
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
     }
@@ -155,16 +103,18 @@ public class ValueAreaExtension extends Study
             this.volumeByPrice = new TreeMap<>();
             nextEnd = series.getInstrument().getEndOfDay(series.getStartTime(startIndex), rth);
             // weekly
-            nextEnd = series.getInstrument().getEndOfWeek(series.getStartTime(startIndex), rth);
+//            nextEnd = series.getInstrument().getEndOfWeek(series.getStartTime(startIndex), rth);
         }
 
         public void onTick(Tick tick) {
             if (tick.getTime() > series.getEndTime(nextIndex)) {
-                calculateValueArea();
-                notifyRedraw();
-                series.setComplete(nextIndex);
+                if (!volumeByPrice.isEmpty()) {
+                    calculateValueArea();
+                    notifyRedraw();
+                    series.setComplete(nextIndex);
+                }
                 nextIndex++;
-                debug("advanced index to " + nextIndex);
+//                debug("advanced index to " + nextIndex);
 
                 double vah = (double) series.getDouble(nextIndex, Values.VAH, 0d);
                 double val = (double) series.getDouble(nextIndex, Values.VAL, 0d);
@@ -191,9 +141,9 @@ public class ValueAreaExtension extends Study
 
             // restart at beginning of session if consecutive
             if (tick.getTime() > nextEnd) {
-//                nextEnd = series.getInstrument().getEndOfDay(tick.getTime(), rth);
+                nextEnd = series.getInstrument().getEndOfDay(tick.getTime(), rth);
                 // if weekly
-                nextEnd = series.getInstrument().getEndOfWeek(tick.getTime(), rth);
+//                nextEnd = series.getInstrument().getEndOfWeek(tick.getTime(), rth);
 
                 volumeByPrice.clear();
             }
@@ -207,15 +157,27 @@ public class ValueAreaExtension extends Study
             if (volumeByPrice.isEmpty()) return;
         }
 
+        private long getEndForTimeframe(String timeframe) {
+            switch (timeframe) {
+                case "Daily":
+                    return series.getInstrument().getEndOfDay(series.getStartTime(startIndex), rth);
+                case "Weekly":
+                    return series.getInstrument().getEndOfWeek(series.getStartTime(startIndex), rth);
+                default:
+                    throw new RuntimeException("Timeframe must be one of \"Daily\" or \"Weekly\", received \"" + timeframe + "\".");
+            }
+        }
+
         private void calculateValueArea() {
-            float interval = (float) series.getInstrument().getTickSize();
-            float volumePOC = Collections.max(volumeByPrice.entrySet(), Map.Entry.comparingByValue()).getKey();
-            int totalVolume = volumeByPrice.values().stream().mapToInt(i -> i).sum();
-            int runningVolume = 0;
-            valueArea = new TreeMap<>(); // Reset Value Area
+            TreeMap<Float, Integer> valueArea = new TreeMap<>(); // Reset Value Area
 
             // Add volume POC to value area
+            float volumePOC = Collections.max(volumeByPrice.entrySet(), Map.Entry.comparingByValue()).getKey();
             valueArea.put(volumePOC, volumeByPrice.get(volumePOC));
+
+            float interval = (float) series.getInstrument().getTickSize();
+            int totalVolume = volumeByPrice.values().stream().mapToInt(i -> i).sum();
+            int runningVolume = 0;
 
             float abovePrice1 = volumePOC + interval;
             float abovePrice2 = volumePOC + (interval * 2);
