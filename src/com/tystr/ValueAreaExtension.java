@@ -100,9 +100,7 @@ public class ValueAreaExtension extends Study
             this.series = series;
             this.nextIndex = startIndex;
             this.volumeByPrice = new TreeMap<>();
-            nextEnd = series.getInstrument().getEndOfDay(series.getStartTime(startIndex), rth);
-            // weekly
-//            nextEnd = series.getInstrument().getEndOfWeek(series.getStartTime(startIndex), rth);
+            nextEnd = getEndForTimeframe(getSettings().getString("Timeframe"), series.getStartTime(startIndex));
         }
 
         public void onTick(Tick tick) {
@@ -128,10 +126,7 @@ public class ValueAreaExtension extends Study
 
             // reset if after end of timeframe (daily, weekly, etc)
             if (tick.getTime() > nextEnd) {
-                nextEnd = series.getInstrument().getEndOfDay(tick.getTime(), rth);
-                // if weekly
-//                nextEnd = series.getInstrument().getEndOfWeek(tick.getTime(), rth);
-
+                nextEnd = getEndForTimeframe(getSettings().getString("Timeframe"), tick.getTime());
                 volumeByPrice.clear();
             }
             calculating = true;
@@ -142,12 +137,14 @@ public class ValueAreaExtension extends Study
             volumeByPrice.put(price, volume);
         }
 
-        private long getEndForTimeframe(String timeframe) {
+        private long getEndForTimeframe(String timeframe, long time) {
             switch (timeframe) {
                 case "Daily":
-                    return series.getInstrument().getEndOfDay(series.getStartTime(startIndex), rth);
+                    debug("using daily");
+                    return series.getInstrument().getEndOfDay(time, rth);
                 case "Weekly":
-                    return series.getInstrument().getEndOfWeek(series.getStartTime(startIndex), rth);
+                    debug("using weekly");
+                    return series.getInstrument().getEndOfWeek(time, rth);
                 default:
                     throw new RuntimeException("Timeframe must be one of \"Daily\" or \"Weekly\", received \"" + timeframe + "\".");
             }
