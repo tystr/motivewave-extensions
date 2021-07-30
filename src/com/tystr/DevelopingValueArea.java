@@ -13,17 +13,16 @@ import java.util.TreeMap;
 
 @StudyHeader(
         namespace="com.tystr",
-        id="VALUE_AREA_EXTENSION",
-//        rb="study_examples.nls.strings", // locale specific strings are loaded from here
-        name="Value Area Extension",
-        label="Value Area Extension",
-        desc="This study plots the developing Low, Mid, and High of the session Volume Value Area, as well as extensions above and below",
+        id="TYSTR_DEVELOPING_VALUE_AREA",
+        name="Developing Value Area",
+        label="Developing Value Area",
+        desc="This study plots the developing value area high, low, and mid for the chosen timeframe, as well as extensions above and below",
         menu="Tystr",
         overlay=true,
         studyOverlay=true,
         requiresVolume = true
 )
-public class ValueAreaExtension extends Study
+public class DevelopingValueArea extends Study
 {
     enum Values { MA, VAH, VAL, VAH_1, VAH_2, VAL_1, VAL_2, VA_PIVOT, TIMEFRAME};
 
