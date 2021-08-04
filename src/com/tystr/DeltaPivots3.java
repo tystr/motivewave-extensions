@@ -221,7 +221,7 @@ public class DeltaPivots3 extends Study
         }
 
         public void onTick(Tick tick) {
-            if (series.isComplete(nextIndex)) {
+            if (series.isComplete(series.findIndex(tick.getTime()))) {
                 return; // nothing to do if this index is complete
             }
             long tickTime = tick.getTime();
