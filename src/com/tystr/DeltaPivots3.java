@@ -6,8 +6,10 @@ import com.motivewave.platform.sdk.draw.Figure;
 import com.motivewave.platform.sdk.draw.Line;
 import com.motivewave.platform.sdk.draw.Marker;
 import com.motivewave.platform.sdk.study.Plot;
+import com.motivewave.platform.sdk.study.RuntimeDescriptor;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
+import study_examples.MyMovingAverage;
 
 import java.awt.*;
 import java.time.*;
@@ -62,6 +64,25 @@ public class DeltaPivots3 extends Study
 
         lines = new ArrayList<>();
 
+
+        // To plot lines between pivots
+        RuntimeDescriptor desc = getRuntimeDescriptor();
+        desc.exportValue(new ValueDescriptor("RthSDP", "RTH Sdp",
+                new String[] {"RthSDP"}));
+        desc.exportValue(new ValueDescriptor("GbxSDP", "Gbx SDP",
+                new String[] {"GbxSDP"}));
+        desc.exportValue(new ValueDescriptor("EuroSDP", "Euro SDP",
+                new String[] {"EuroSDP"}));
+
+        SettingGroup sdpLineGroup = tab.addGroup("SDP Lines");
+        sdpLineGroup.addRow(new PathDescriptor("RthSDP", "RTH SDP", defaults.getYellow(), 1.0f, null, false, false, true));
+        sdpLineGroup.addRow(new PathDescriptor("GbxSDP", "Gbx SDP", defaults.getRed(), 1.0f, null, false, false, true));
+        sdpLineGroup.addRow(new PathDescriptor("EuroSDP", "Euro SDP", defaults.getBlue(), 1.0f, null, false, false, true));
+
+        desc.declarePath("RthSDP", "RthSDP");
+        desc.declarePath("GbxSDP", "GbxSDP");
+        desc.declarePath("EuroSDP", "EuroSDP");
+
         clearFigures();
     }
 
@@ -78,7 +99,6 @@ public class DeltaPivots3 extends Study
             if (series.getStartTime(i) < threshold) break;
         }
         TickOperation calculator = new SDPCalculator(startIndex, series, ctx.getDefaults());
-        debug("starting at index " + startIndex);
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
     }
 
@@ -237,7 +257,6 @@ public class DeltaPivots3 extends Study
                 tradingDayStart = nextTradingDayStart;
                 nextTradingDayStart = Util.getStartOfNextDay(tickTime, instrument, false);
 
-                debug("Setting next trading day start: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(nextTradingDayStart), ZoneId.of("UTC")));
                 // rth session:
                 gbxStart = this.tradingDayStart;
                 gbxEnd = gbxStart + (9 * Util.MILLIS_IN_HOUR) + (25 * Util.MILLIS_IN_MINUTE);
@@ -248,9 +267,9 @@ public class DeltaPivots3 extends Study
                 rthStart = this.tradingDayStart + (19 * Util.MILLIS_IN_HOUR) + (30 * Util.MILLIS_IN_MINUTE);
                 rthEnd = rthStart + (2 * Util.MILLIS_IN_HOUR) + (20 * Util.MILLIS_IN_MINUTE);//instrument.getEndOfDay(tickTime, true) - Util.MILLIS_IN_HOUR - (10 * Util.MILLIS_IN_MINUTE);
                 // euro session:
-                debug("GBX: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(gbxStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(gbxEnd), ZoneId.of("UTC")));
-                debug("EURO: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(euroStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(euroEnd), ZoneId.of("UTC")));
-                debug("RTH: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(rthStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(rthEnd), ZoneId.of("UTC")));
+//                debug("GBX: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(gbxStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(gbxEnd), ZoneId.of("UTC")));
+//                debug("EURO: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(euroStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(euroEnd), ZoneId.of("UTC")));
+//                debug("RTH: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(rthStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(rthEnd), ZoneId.of("UTC")));
             }
 
             boolean insideWindow = false;
@@ -301,31 +320,34 @@ public class DeltaPivots3 extends Study
                 }
 
                 // color bars
-                debug("max delta for session " + currentSession + " starts at index " + maxDeltaWindowStartIndex);
-                debug("maxDeltaWindowSTartTime:" + ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(maxDeltaWindowStartIndex)), ZoneId.of("UTC")));
+//                debug("max delta for session " + currentSession + " starts at index " + maxDeltaWindowStartIndex);
+//                debug("maxDeltaWindowSTartTime:" + ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(maxDeltaWindowStartIndex)), ZoneId.of("UTC")));
+
                 colorBars();
 
                 // draw pivots
 
-                debug("Completed Window ending at " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(nextEnd), ZoneId.of("UTC")));
 //                debug("Completed Window ending at " + nextEnd);
                 if (currentSession.equals("RTH")) {
+                    series.setFloat(maxDeltaWindowStartIndex, "RthSDP", series.getOpen(maxDeltaWindowStartIndex));
                     nextStart = gbxStart;
                     nextEnd = gbxEnd;
                 } else if (currentSession.equals("GBX")) {
+                    series.setFloat(maxDeltaWindowStartIndex, "GbxSDP", series.getOpen(maxDeltaWindowStartIndex));
                     nextStart = euroStart;
                     nextEnd = euroEnd;
                 } else if (currentSession.equals("EURO")) {
+                    series.setFloat(maxDeltaWindowStartIndex, "EuroSDP", series.getOpen(maxDeltaWindowStartIndex));
                     nextStart = rthStart;
                     nextEnd = rthEnd;
                 }
 
-                debug("currentSession: " + currentSession);
-                debug("currentTickTime: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(tickTime), ZoneId.of("UTC")));
-                debug ("New window starting at " +
-                        ZonedDateTime.ofInstant(Instant.ofEpochMilli(nextStart), ZoneId.of("UTC")) +
-                        " and ending at " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(nextEnd), ZoneId.of("UTC"))
-                );
+//                debug("currentSession: " + currentSession);
+//                debug("currentTickTime: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(tickTime), ZoneId.of("UTC")));
+//                debug ("New window starting at " +
+//                        ZonedDateTime.ofInstant(Instant.ofEpochMilli(nextStart), ZoneId.of("UTC")) +
+//                        " and ending at " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(nextEnd), ZoneId.of("UTC"))
+//                );
 
                 // reset
                 maxDeltaWindowStartIndex = 0;
