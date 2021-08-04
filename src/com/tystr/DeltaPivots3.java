@@ -245,6 +245,40 @@ public class DeltaPivots3 extends Study
             }
         }
 
+        class SDP {
+            private final float high;
+            private final float low;
+            private final float mid;
+
+            public SDP(float high, float low) {
+                this.high = high;
+                this.low = low;
+                this.mid = high - ((high - low) / 2);
+            }
+
+            public float getHigh() {
+                return high;
+            }
+
+            public float getLow() {
+                return low;
+            }
+            public float getMid() {
+                return mid;
+            }
+        }
+
+        private SDP calculateSDPFromWindow(int windowStart, int windowSize) {
+            float high = Float.MIN_VALUE;
+            float low = Float.MAX_VALUE;
+            for (int i = windowStart; i < windowStart + windowSize; i++) {
+                if (series.getHigh(i) > high) high = series.getHigh(i);
+                if (series.getLow(i) < low) low = series.getLow(i);
+            }
+
+            return new SDP(high, low);
+        }
+
         public void onTick(Tick tick) {
             if (series.isComplete(series.findIndex(tick.getTime()))) {
                 return; // nothing to do if this index is complete
@@ -328,19 +362,25 @@ public class DeltaPivots3 extends Study
                 // draw pivots
 
 //                debug("Completed Window ending at " + nextEnd);
+                SDP sdp;
                 if (currentSession.equals("RTH")) {
-                    series.setFloat(maxDeltaWindowStartIndex, "RthSDP", series.getOpen(maxDeltaWindowStartIndex));
+                    sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("RTH"));
+                    series.setFloat(maxDeltaWindowStartIndex, "RthSDP", sdp.getMid());
                     nextStart = gbxStart;
                     nextEnd = gbxEnd;
                 } else if (currentSession.equals("GBX")) {
-                    series.setFloat(maxDeltaWindowStartIndex, "GbxSDP", series.getOpen(maxDeltaWindowStartIndex));
+                    sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("GBX"));
+                    series.setFloat(maxDeltaWindowStartIndex, "GbxSDP", sdp.getMid());
                     nextStart = euroStart;
                     nextEnd = euroEnd;
                 } else if (currentSession.equals("EURO")) {
-                    series.setFloat(maxDeltaWindowStartIndex, "EuroSDP", series.getOpen(maxDeltaWindowStartIndex));
+                    sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("EURO"));
+                    series.setFloat(maxDeltaWindowStartIndex, "EuroSDP", sdp.getMid());
                     nextStart = rthStart;
                     nextEnd = rthEnd;
                 }
+
+
 
 //                debug("currentSession: " + currentSession);
 //                debug("currentTickTime: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(tickTime), ZoneId.of("UTC")));
