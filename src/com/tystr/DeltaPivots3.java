@@ -290,7 +290,7 @@ public class DeltaPivots3 extends Study
                 tradingDayStart = nextTradingDayStart;
                 nextTradingDayStart = Util.getStartOfNextDay(tickTime, instrument, false);
 
-                // rth session:
+                // gbx session:
                 gbxStart = this.tradingDayStart;
                 gbxEnd = gbxStart + (9 * Util.MILLIS_IN_HOUR) + (25 * Util.MILLIS_IN_MINUTE);
                 // euro session:
@@ -401,10 +401,6 @@ public class DeltaPivots3 extends Study
             // if we are after or equal to next start and haven't begun calculating yet, set next start
             if (insideWindow) {
                 if (!calculating) {
-                    // make sure we're reset
-                    maxDeltaWindowStartIndex = 0;
-                    maxDeltaWindowSum = 0;
-                    deltaByPrice.clear();
                     // starting a new session window, mark the start for debugging
                     if (getSettings().getBoolean("HighlightWindows")) {
                         Marker startArrow = new Marker(new Coordinate(series.getStartTime(series.findIndex(tick.getTime())), series.getLow(series.findIndex(tick.getTime())) - 2), Enums.MarkerType.TRIANGLE);
