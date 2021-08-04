@@ -40,37 +40,25 @@ public class DeltaPivots3 extends Study
         var sd = createSD();
         var tab = sd.addTab("General");
 
-        var grp = tab.addGroup("");
+        var grp = tab.addGroup("Lines and Extensions");
         grp.addRow(new PathDescriptor("PivotLine", "Pivot Line", defaults.getOrange(), 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("HighExtensionLine", "High Extensions", defaults.getBlue(), 1.0f, null, true, false, false));
         grp.addRow(new PathDescriptor("LowExtensionLine", "Low Extensions", defaults.getRed(), 1.0f, null, true, false, false));
 
         // Volume to use for the rolling window
-        grp.addRow(new IntegerDescriptor("Volume", "Volume", 10000, 1, Integer.MAX_VALUE, 1));
-        grp.addRow(new IntegerDescriptor("WindowSize", "Window Size", 10, 1, Integer.MAX_VALUE, 1));
+//        grp.addRow(new IntegerDescriptor("Volume", "Volume", 10000, 1, Integer.MAX_VALUE, 1));
+        var windowGrp = tab.addGroup("Rolling Windows");
+        windowGrp.addRow(new IntegerDescriptor("RthWindowSize", "RTH Window Size", 10, 1, Integer.MAX_VALUE, 1));
+        windowGrp.addRow(new IntegerDescriptor("GbxWindowSize", "GBX Window Size", 10, 1, Integer.MAX_VALUE, 1));
+        windowGrp.addRow(new IntegerDescriptor("EuroWindowSize", "Euro Window Size", 10, 1, Integer.MAX_VALUE, 1));
+        windowGrp.addRow(new BooleanDescriptor("HighlightBars", "Color Bars", true));
 
-        List<NVP> timeframes = List.of(
-                new NVP("Daily", "Daily"),
-                new NVP("Weekly", "Weekly")
-        );
-
-        grp.addRow(new DiscreteDescriptor("Timeframe", "Timeframe", "Daily", timeframes));
-
-        grp.addRow(new BooleanDescriptor("HighlightBars", "Highlight Bars", true));
-        sd.addQuickSettings("SmoothingBars", "PivotLine", "HighExtensionLine", "LowExtensionLine", "ValueAreaPercent");
+        sd.addQuickSettings("PivotLine", "HighExtensionLine", "LowExtensionLine");
 
         // These are advanced or debug only settings - @todo remove from published version
         var advancedTab= sd.addTab("Advanced");
         SettingGroup advancedGroup = advancedTab.addGroup("Debug");
-        advancedGroup.addRow(new BooleanDescriptor("HighlightWindows", "Highlight Window", false));
-        advancedGroup.addRow(new ColorDescriptor("WindowBarColor", "Window Bar Color", defaults.getRed()));
-
-        advancedGroup.addRow(new BooleanDescriptor("ShowVolumeByPrice", "Show Volume By Price", false));
-
-        LocalTime rthOpenTime = LocalTime.of(9, 30);
-        LocalDateTime rthOpenDateTime = LocalDateTime.of(LocalDate.now(), rthOpenTime);
-        LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(rthOpenDateTime)) rthOpenDateTime = rthOpenDateTime.minusDays(1);
+        advancedGroup.addRow(new BooleanDescriptor("HighlightWindows", "Show Session Window Start and End", false));
 
         lines = new ArrayList<>();
 
@@ -191,7 +179,8 @@ public class DeltaPivots3 extends Study
         }
 
         private void calculateRollingWindow() {
-            int windowSize = getSettings().getInteger("WindowSize");
+            int windowSize = getRollingWindowSizeForSession(currentSession);
+
             int deltaSum = deltaByPrice.values().stream().mapToInt(i -> i).sum();
             series.setInt(nextIndex, Values.DELTA, deltaSum);
 
@@ -212,11 +201,27 @@ public class DeltaPivots3 extends Study
             notifyRedraw();
         }
 
+        private int getRollingWindowSizeForSession(String session) {
+            int windowSize;
+            if (session.equals("RTH")) {
+                windowSize = getSettings().getInteger("RthWindowSize");
+            } else if (session.equals("GBX")) {
+                windowSize = getSettings().getInteger("GbxWindowSize");
+            } else if (session.equals("EURO")) {
+                windowSize = getSettings().getInteger("EuroWindowSize");
+            } else {
+                error("No rolling window size configured, using default \"10\".");
+                windowSize = 10;
+            }
+            return windowSize;
+        }
+
+
         private void colorBars() {
             Color barColor = maxDeltaWindowSum > 0 ? defaults.getGreen() : defaults.getRed();
-            for (int i = maxDeltaWindowStartIndex; i < (maxDeltaWindowStartIndex + getSettings().getInteger("WindowSize")); i++) {
+            for (int i = maxDeltaWindowStartIndex; i < (maxDeltaWindowStartIndex + getRollingWindowSizeForSession(currentSession)); i++) {
 //                series.setPriceBarColor(i, getSettings().getColor("WindowBarColor"));
-                series.setPriceBarColor(i, barColor);
+                series.setPriceBarColor(i, barColor); // @todo set this on delta %
             }
         }
 
@@ -287,11 +292,13 @@ public class DeltaPivots3 extends Study
                 calculating = false;
 
                 // DEBUG: plot arrow marking end of session/period
-                Marker arrow = new Marker(new Coordinate(series.getStartTime(nextIndex), series.getClose(nextIndex)-8), Enums.MarkerType.TRIANGLE);
-                arrow.setSize(Enums.Size.LARGE);
-                arrow.setFillColor(defaults.getRed());
-                arrow.setTextValue(currentSession);
-                addFigure(Plot.PRICE, arrow);
+                if (getSettings().getBoolean("HighlightWindows")) {
+                    Marker arrow = new Marker(new Coordinate(series.getStartTime(nextIndex), series.getClose(nextIndex) - 8), Enums.MarkerType.TRIANGLE);
+                    arrow.setSize(Enums.Size.LARGE);
+                    arrow.setFillColor(defaults.getRed());
+                    arrow.setTextValue(currentSession);
+                    addFigure(Plot.PRICE, arrow);
+                }
 
                 // color bars
                 debug("max delta for session " + currentSession + " starts at index " + maxDeltaWindowStartIndex);
@@ -334,11 +341,13 @@ public class DeltaPivots3 extends Study
                     maxDeltaWindowSum = 0;
                     deltaByPrice.clear();
                     // starting a new session window, mark the start for debugging
-                    Marker startArrow = new Marker(new Coordinate(series.getStartTime(series.findIndex(tick.getTime())), series.getLow(series.findIndex(tick.getTime())) - 2), Enums.MarkerType.TRIANGLE);
-                    startArrow.setSize(Enums.Size.LARGE);
-                    startArrow.setFillColor(defaults.getGreen());
-                    startArrow.setTextValue(currentSession);
-                    addFigure(Plot.PRICE, startArrow);
+                    if (getSettings().getBoolean("HighlightWindows")) {
+                        Marker startArrow = new Marker(new Coordinate(series.getStartTime(series.findIndex(tick.getTime())), series.getLow(series.findIndex(tick.getTime())) - 2), Enums.MarkerType.TRIANGLE);
+                        startArrow.setSize(Enums.Size.LARGE);
+                        startArrow.setFillColor(defaults.getGreen());
+                        startArrow.setTextValue(currentSession);
+                        addFigure(Plot.PRICE, startArrow);
+                    }
                     calculating = true;
                 }
 
