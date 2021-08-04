@@ -222,18 +222,17 @@ public class DeltaPivots3 extends Study
         }
 
         private int getRollingWindowSizeForSession(String session) {
-            int windowSize;
-            if (session.equals("RTH")) {
-                windowSize = getSettings().getInteger("RthWindowSize");
-            } else if (session.equals("GBX")) {
-                windowSize = getSettings().getInteger("GbxWindowSize");
-            } else if (session.equals("EURO")) {
-                windowSize = getSettings().getInteger("EuroWindowSize");
-            } else {
-                error("No rolling window size configured, using default \"10\".");
-                windowSize = 10;
+            switch (session) {
+                case "RTH":
+                    return getSettings().getInteger("RthWindowSize");
+                case "GBX":
+                    return getSettings().getInteger("GbxWindowSize");
+                case "EURO":
+                    return getSettings().getInteger("EuroWindowSize");
+                default:
+                    error("No rolling window size configured, using default \"10\".");
+                    return 10;
             }
-            return windowSize;
         }
 
 
@@ -363,21 +362,25 @@ public class DeltaPivots3 extends Study
 
 //                debug("Completed Window ending at " + nextEnd);
                 SDP sdp;
-                if (currentSession.equals("RTH")) {
-                    sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("RTH"));
-                    series.setFloat(maxDeltaWindowStartIndex, "RthSDP", sdp.getMid());
-                    nextStart = gbxStart;
-                    nextEnd = gbxEnd;
-                } else if (currentSession.equals("GBX")) {
-                    sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("GBX"));
-                    series.setFloat(maxDeltaWindowStartIndex, "GbxSDP", sdp.getMid());
-                    nextStart = euroStart;
-                    nextEnd = euroEnd;
-                } else if (currentSession.equals("EURO")) {
-                    sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("EURO"));
-                    series.setFloat(maxDeltaWindowStartIndex, "EuroSDP", sdp.getMid());
-                    nextStart = rthStart;
-                    nextEnd = rthEnd;
+                switch (currentSession) {
+                    case "RTH":
+                        sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("RTH"));
+                        series.setFloat(maxDeltaWindowStartIndex, "RthSDP", sdp.getMid());
+                        nextStart = gbxStart;
+                        nextEnd = gbxEnd;
+                        break;
+                    case "GBX":
+                        sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("GBX"));
+                        series.setFloat(maxDeltaWindowStartIndex, "GbxSDP", sdp.getMid());
+                        nextStart = euroStart;
+                        nextEnd = euroEnd;
+                        break;
+                    case "EURO":
+                        sdp = calculateSDPFromWindow(maxDeltaWindowStartIndex, getRollingWindowSizeForSession("EURO"));
+                        series.setFloat(maxDeltaWindowStartIndex, "EuroSDP", sdp.getMid());
+                        nextStart = rthStart;
+                        nextEnd = rthEnd;
+                        break;
                 }
 
 
