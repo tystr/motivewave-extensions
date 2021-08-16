@@ -87,21 +87,20 @@ public class DevelopingValueArea extends Study
             startIndex = i;
             if (series.getStartTime(i) < threshold) break;
         }
-        TickOperation calculator = new VPCalculator(startIndex, series);
+        TickOperation calculator = new VPCalculator(startIndex, series, ctx.isRTH());
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
     }
 
     class VPCalculator implements TickOperation {
         private final DataSeries series;
-        private int startIndex;
         private int nextIndex;
-        private final boolean rth = true;
-        private SortedMap<Float, Integer> volumeByPrice;
+        private final boolean rth;
+        private final SortedMap<Float, Integer> volumeByPrice;
         private boolean calculating = false;
-
         private long nextEnd;
-        public VPCalculator(int startIndex, DataSeries series) {
-            this.startIndex = startIndex;
+
+        public VPCalculator(int startIndex, DataSeries series, boolean isRth) {
+            this.rth = isRth;
             this.series = series;
             this.nextIndex = startIndex;
             this.volumeByPrice = new TreeMap<>();
@@ -123,7 +122,7 @@ public class DevelopingValueArea extends Study
             Instrument instrument = series.getInstrument();
             if (rth && !instrument.isInsideTradingHours(tick.getTime(), rth)) {
                 if  (calculating) {
-                    volumeByPrice.clear();
+//                    volumeByPrice.clear();
                     calculating = false;
                 }
                 return;
