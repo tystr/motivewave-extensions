@@ -116,7 +116,7 @@ public class VolumeProfile {
         float belowPrice1 = volumePOC; //- interval;
         float belowPrice2 = volumePOC; // - (interval * 2);
         boolean incrementAbove = false;
-        int aboveIncrements = 0;
+        int aboveIncrements = -2;
         int belowIncrements = -2;
         int totalVolume = getVolume();
 
