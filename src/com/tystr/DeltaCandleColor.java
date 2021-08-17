@@ -4,6 +4,7 @@ import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
+import com.tystr.delta.DeltaBar;
 
 @StudyHeader(
         namespace="com.tystr",
@@ -15,7 +16,8 @@ import com.motivewave.platform.sdk.study.StudyHeader;
         menu="Tystr",
         overlay=true,
         studyOverlay=true,
-        requiresVolume = true
+        requiresVolume = true,
+        requiresBarUpdates=true
 )
 public class DeltaCandleColor extends Study
 {
@@ -28,11 +30,11 @@ public class DeltaCandleColor extends Study
         var tab = sd.addTab("General");
 
         var grp = tab.addGroup("Display");
-        grp.addRow(new IntegerDescriptor("PositiveDeltaThreshold", "Positive Threshold", 100, 0, Integer.MAX_VALUE, 1));
+        grp.addRow(new IntegerDescriptor("PositiveDeltaThreshold", "Positive Threshold %", 20, 0, 100, 1));
         grp.addRow(new ColorDescriptor("PositiveDeltaColor", "Positive Delta Candle Color", defaults.getGreen()));
-        grp.addRow(new IntegerDescriptor("NegativeDeltaThreshold", "Negative Threshold", -100, Integer.MIN_VALUE, 0, 1));
+        grp.addRow(new IntegerDescriptor("NegativeDeltaThreshold", "Negative Threshold %", -20, -100, 0, 1));
         grp.addRow(new ColorDescriptor("NegativeDeltaColor", "Negative Delta Candle Color", defaults.getRed()));
-        grp.addRow(new ColorDescriptor("NeutralDeltaColor", "Neutral Delta Candle Color", defaults.getYellow()));
+        grp.addRow(new ColorDescriptor("NeutralDeltaColor", "Neutral Delta Candle Color", defaults.getOrange()));
     }
 
     @Override
@@ -47,65 +49,60 @@ public class DeltaCandleColor extends Study
             startIndex = i;
             if (series.getStartTime(i) < threshold) break;
         }
-        TickOperation calculator = new DeltaCalculator(startIndex, series, ctx.getDefaults());
+        TickOperation calculator = new DeltaCalculator(startIndex, series);
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+    }
+
+    private float getPositiveDeltaThreshold() {
+        return (float) getSettings().getInteger("PositiveDeltaThreshold") / 100;
+    }
+    private float getNegativeDeltaThreshold() {
+        return (float) getSettings().getInteger("NegativeDeltaThreshold") / 100;
     }
 
     class DeltaCalculator implements TickOperation {
         private final DataSeries series;
         private int nextIndex;
-        private final boolean rth = true;
-        private int totalDelta = 0;
-        private boolean calculating = false;
-        private final Defaults defaults;
+        private DeltaBar deltaBar;
 
         private long nextEnd;
-        public DeltaCalculator(int startIndex, DataSeries series, Defaults defaults) {
+        public DeltaCalculator(int startIndex, DataSeries series) {
             this.series = series;
             this.nextIndex = startIndex;
-            nextEnd = series.getEndTime(startIndex);
-            this.defaults = defaults;
+            this.nextEnd = series.getEndTime(startIndex);
+            this.deltaBar = new DeltaBar();
         }
 
         public void onTick(Tick tick) {
             if (series.isComplete(nextIndex)) return; // nothing to do if this index is complete
 
             if (tick.getTime() > series.getEndTime(nextIndex)) { // Bar is complete, set color and reset delta
-                if (series.getInt(nextIndex, Values.DELTA) > getSettings().getInteger("PositiveDeltaThreshold")) {
+                if (deltaBar.isEmpty()) return;
+                debug("delta percent (" + deltaBar.getVolume() + " / " + deltaBar.getDelta() + "): " + deltaBar.getDeltaPercent());
+                if (deltaBar.getDeltaPercent() > getPositiveDeltaThreshold()) {
                     series.setPriceBarColor(nextIndex, getSettings().getColor("PositiveDeltaColor"));
-                } else if (series.getInt(nextIndex, Values.DELTA) < getSettings().getInteger("NegativeDeltaThreshold")) {
+                } else if (deltaBar.getDeltaPercent() < getNegativeDeltaThreshold()) {
                     series.setPriceBarColor(nextIndex, getSettings().getColor("NegativeDeltaColor"));
                 } else {
                     series.setPriceBarColor(nextIndex, getSettings().getColor("NeutralDeltaColor"));
                 }
                 notifyRedraw();
+
+                series.setValue(nextIndex, "DeltaBar", deltaBar);
                 series.setComplete(nextIndex);
-                totalDelta = 0;
+
+                // reset for next bar
+                deltaBar = new DeltaBar();
                 nextIndex++;
                 nextEnd = series.getEndTime(nextIndex);
             }
 
-            calculating = true;
-
             if (tick.isAskTick()) {
-                totalDelta += tick.getVolume();
+                deltaBar.addVolumeAtAsk(tick.getAskPrice(), tick.getVolume());
             } else {
-                totalDelta -= tick.getVolume();
+                deltaBar.addVolumeAtBid(tick.getBidPrice(), tick.getVolume());
             }
-            series.setInt(nextIndex, Values.DELTA, totalDelta);
-        }
-
-        private long getEndForTimeframe(String timeframe, long time) {
-            switch (timeframe) {
-                case "Daily":
-                    debug("using daily");
-                    return series.getInstrument().getEndOfDay(time, rth);
-                case "Weekly":
-                    debug("using weekly");
-                    return series.getInstrument().getEndOfWeek(time, rth);
-                default:
-                    throw new RuntimeException("Timeframe must be one of \"Daily\" or \"Weekly\", received \"" + timeframe + "\".");
-            }
+            series.setInt(nextIndex, Values.DELTA, deltaBar.getDelta());
         }
     }
 }
