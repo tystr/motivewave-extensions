@@ -7,7 +7,7 @@ import java.util.TreeMap;
 
 /**
  * This class provides a data structure and convenience methods for interacting with Volume Profile data. A volume
- * profile is essentially a structure of volume by price within which a value can be calculated.
+ * profile is essentially a structure of volume by price within which a value area can be calculated.
  *
  * @author Tyler Stroud
  */
