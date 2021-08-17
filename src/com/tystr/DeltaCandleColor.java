@@ -10,7 +10,6 @@ import com.tystr.delta.DeltaBar;
 @StudyHeader(
         namespace="com.tystr",
         id="DELTA_CANDLE_COLOR",
-//        rb="study_examples.nls.strings", // locale specific strings are loaded from here
         name="Delta Candle Color",
         label="Delta Candle Color",
         desc="This study colors candles based on configured delta thresholds.",
@@ -56,7 +55,6 @@ public class DeltaCandleColor extends Study
         RuntimeDescriptor rd = getRuntimeDescriptor();
         rd.exportValue(new ValueDescriptor(Values.DELTA, "Delta", null));
         rd.exportValue(new ValueDescriptor(Values.DELTA_PERCENT, "Delta %", null));
-
     }
 
     @Override
