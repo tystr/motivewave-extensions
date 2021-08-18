@@ -16,11 +16,14 @@ import java.util.List;
         menu="Tystr",
         overlay=true,
         studyOverlay=true,
-        requiresVolume = true
+        requiresVolume = true,
+        requiresBarUpdates = true
 )
 public class DevelopingValueArea extends Study
 {
     enum Values { MA, VAH, VAL, VAH_1, VAH_2, VAL_1, VAL_2, VA_PIVOT, TIMEFRAME};
+    TickOperation calculator;
+    private boolean isCalculating = false;
 
     @Override
     public void initialize(Defaults defaults)
@@ -38,9 +41,9 @@ public class DevelopingValueArea extends Study
 
         grp.addRow(new DiscreteDescriptor("Timeframe", "Timeframe", "Daily", timeframes));
 
-        desc.exportValue(new ValueDescriptor(Values.VAH, "VAH", new String[] {"VAH_LINE"}));
-        desc.exportValue(new ValueDescriptor(Values.VAL, "VAL", new String[] {"VAL_LINE"}));
-        desc.exportValue(new ValueDescriptor(Values.VA_PIVOT, "VA Mid", new String[] {"VALMID_LINE"}));
+        desc.exportValue(new ValueDescriptor(Values.VAH, "VAH", null));
+        desc.exportValue(new ValueDescriptor(Values.VAL, "VAL", null));
+        desc.exportValue(new ValueDescriptor(Values.VA_PIVOT, "VA Mid", null));
 
         PathDescriptor vahLinePathDescriptor = new PathDescriptor("VAH_LINE", "VAH Line", defaults.getBlueLine(), 1.0f, null, true, true, true);
         PathDescriptor valLinePathDescriptor = new PathDescriptor("VAL_LINE", "VAL Line", defaults.getRedLine(), 1.0f, null, true, true, true);
@@ -83,8 +86,16 @@ public class DevelopingValueArea extends Study
             startIndex = i;
             if (series.getStartTime(i) < threshold) break;
         }
-        TickOperation calculator = new VPCalculator(startIndex, series, ctx.isRTH());
+        calculator = new VPCalculator(startIndex, series, ctx.isRTH());
+        isCalculating = true;
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+        isCalculating = false;
+    }
+
+    @Override
+    public void onTick(DataContext ctx, Tick tick) {
+        if (isCalculating || calculator == null) return;
+        calculator.onTick(tick);
     }
 
     class VPCalculator implements TickOperation {
@@ -92,7 +103,6 @@ public class DevelopingValueArea extends Study
         private int nextIndex;
         private final boolean rth;
         private final VolumeProfile volumeProfile;
-        private boolean calculating = false;
         private long nextEnd;
 
         public VPCalculator(int startIndex, DataSeries series, boolean isRth) {
@@ -104,38 +114,15 @@ public class DevelopingValueArea extends Study
         }
 
         public void onTick(Tick tick) {
-            if (series.isComplete(nextIndex)) return; // nothing to do if this index is complete
-
+            volumeProfile.addVolumeAtPrice(tick.isAskTick() ? tick.getAskPrice() : tick.getBidPrice(), tick.getVolume());
             if (tick.getTime() > series.getEndTime(nextIndex)) {
-                if (!volumeProfile.isEmpty()) {
-                    volumeProfile.calculateValueArea();
-
-                    double vah = volumeProfile.getValueAreaHigh();
-                    double val = volumeProfile.getValueAreaLow();
-                    double breadth = volumeProfile.getValueAreaBreadth();
-                    double pivot = vah - (breadth / 2);
-                    double vah_1 = vah + breadth;
-                    double val_1 = val - breadth;
-
-                    series.setDouble(nextIndex, Values.VAH, vah);
-                    series.setDouble(nextIndex, Values.VAL,  val);
-                    series.setDouble(nextIndex, Values.VAH_1, vah_1);
-                    series.setDouble(nextIndex, Values.VAL_1, val_1);
-                    series.setDouble(nextIndex, Values.VA_PIVOT, pivot);
-
-                    notifyRedraw();
-                    series.setComplete(nextIndex);
-
-                }
+                calculate();
+                notifyRedraw();
+                series.setComplete(nextIndex);
                 nextIndex++;
-            }
-
-            Instrument instrument = series.getInstrument();
-            if (rth && !instrument.isInsideTradingHours(tick.getTime(), rth)) {
-                if  (calculating) {
-                    calculating = false;
-                }
-                return;
+            } else if (!isCalculating) {
+                calculate();
+                notifyRedraw();
             }
 
             // reset if after end of timeframe (daily, weekly, etc)
@@ -143,10 +130,24 @@ public class DevelopingValueArea extends Study
                 nextEnd = getEndForTimeframe(getSettings().getString("Timeframe"), tick.getTime());
                 volumeProfile.clear();
             }
-            calculating = true;
+        }
 
-            float price = tick.isAskTick() ? tick.getAskPrice() : tick.getBidPrice();
-            volumeProfile.addVolumeAtPrice(price, tick.getVolume());
+        private void calculate() {
+            if (volumeProfile.isEmpty()) return;
+            volumeProfile.calculateValueArea();
+
+            double vah = volumeProfile.getValueAreaHigh();
+            double val = volumeProfile.getValueAreaLow();
+            double breadth = volumeProfile.getValueAreaBreadth();
+            double pivot = vah - (breadth / 2);
+            double vah_1 = vah + breadth;
+            double val_1 = val - breadth;
+
+            series.setDouble(nextIndex, Values.VAH, vah);
+            series.setDouble(nextIndex, Values.VAL, val);
+            series.setDouble(nextIndex, Values.VAH_1, vah_1);
+            series.setDouble(nextIndex, Values.VAL_1, val_1);
+            series.setDouble(nextIndex, Values.VA_PIVOT, pivot);
         }
 
         private long getEndForTimeframe(String timeframe, long time) {
