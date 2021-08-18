@@ -100,10 +100,10 @@ public class DeltaCandleColor extends Study
 
         public void onTick(Tick tick) {
             if (tick.getTime() > series.getEndTime(nextIndex)) { // Bar is complete, set color and reset delta
-                if (deltaBar.isEmpty()) return;
-
-                colorBar(deltaBar);
-                notifyRedraw();
+                if (!deltaBar.isEmpty()) {
+                    colorBar(deltaBar);
+                    notifyRedraw();
+                }
 
                 series.setValue(nextIndex, "DeltaBar", deltaBar);
                 series.setComplete(nextIndex);
@@ -121,6 +121,11 @@ public class DeltaCandleColor extends Study
             }
             series.setInt(nextIndex, Values.DELTA, deltaBar.getDelta());
             series.setFloat(nextIndex, Values.DELTA_PERCENT, deltaBar.getDeltaPercent());
+
+            if (!isCalculating) {
+                colorBar(deltaBar);
+                notifyRedraw();
+            }
         }
 
         private void colorBar(DeltaBar deltaBar) {
