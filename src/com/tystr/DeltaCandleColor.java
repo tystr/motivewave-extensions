@@ -7,6 +7,9 @@ import com.motivewave.platform.sdk.study.Study;
 import com.motivewave.platform.sdk.study.StudyHeader;
 import com.tystr.delta.DeltaBar;
 
+import java.awt.*;
+import java.util.Collection;
+
 @StudyHeader(
         namespace="com.tystr",
         id="DELTA_CANDLE_COLOR",
@@ -62,10 +65,11 @@ public class DeltaCandleColor extends Study
     @Override
     protected void calculateValues(DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
+        Defaults defaults = ctx.getDefaults();
         Instrument instrument = series.getInstrument();
 
         int startIndex = 1;
-        calculator = new DeltaCalculator(startIndex, series);
+        calculator = new DeltaCalculator(startIndex, series, defaults);
         isCalculating = true;
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
         isCalculating = false;
@@ -77,30 +81,21 @@ public class DeltaCandleColor extends Study
         calculator.onTick(tick);
     }
 
-    private float getPositiveDeltaThreshold() {
-        return (float) getSettings().getInteger("PositiveDeltaThreshold") / 100;
-    }
-    private float getNegativeDeltaThreshold() {
-        return (float) getSettings().getInteger("NegativeDeltaThreshold") / 100;
-    }
-    private float getNeutralDeltaLowThreshold() {
-        return (float) getSettings().getInteger("NeutralDeltaLowThreshold") / 100;
-    }
-    private float getNeutralDeltaHighThreshold() {
-        return (float) getSettings().getInteger("NeutralDeltaHighThreshold") / 100;
-    }
-
     class DeltaCalculator implements TickOperation {
         private final DataSeries series;
         private int nextIndex;
         private DeltaBar deltaBar;
 
         private long nextEnd;
-        public DeltaCalculator(int startIndex, DataSeries series) {
+        private final Color defaultBarUpColor;
+        private final Color defaultBarDownColor;
+        public DeltaCalculator(int startIndex, DataSeries series, Defaults defaults) {
             this.series = series;
             this.nextIndex = startIndex;
             this.nextEnd = series.getEndTime(startIndex);
             this.deltaBar = new DeltaBar();
+            defaultBarUpColor = defaults.getBarUpColor();
+            defaultBarDownColor = defaults.getBarDownColor();
         }
 
         public void onTick(Tick tick) {
@@ -141,7 +136,27 @@ public class DeltaCandleColor extends Study
                 series.setPriceBarColor(nextIndex, getSettings().getColor("NegativeDeltaColor"));
             } else if (deltaPercent > getNeutralDeltaLowThreshold() && deltaPercent < getNeutralDeltaHighThreshold()) {
                 series.setPriceBarColor(nextIndex, getSettings().getColor("NeutralDeltaColor"));
+            } else {
+                if (series.getClose(nextIndex) > series.getOpen(nextIndex)) {
+                    series.setPriceBarColor(defaultBarUpColor);
+                } else {
+                    series.setPriceBarColor(defaultBarDownColor);
+                }
             }
         }
+
+        private float getPositiveDeltaThreshold() {
+            return (float) getSettings().getInteger("PositiveDeltaThreshold") / 100;
+        }
+        private float getNegativeDeltaThreshold() {
+            return (float) getSettings().getInteger("NegativeDeltaThreshold") / 100;
+        }
+        private float getNeutralDeltaLowThreshold() {
+            return (float) getSettings().getInteger("NeutralDeltaLowThreshold") / 100;
+        }
+        private float getNeutralDeltaHighThreshold() {
+            return (float) getSettings().getInteger("NeutralDeltaHighThreshold") / 100;
+        }
+
     }
 }
