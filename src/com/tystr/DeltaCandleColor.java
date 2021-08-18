@@ -22,6 +22,8 @@ import com.tystr.delta.DeltaBar;
 public class DeltaCandleColor extends Study
 {
     enum Values { DELTA, DELTA_PERCENT};
+    private DeltaCalculator calculator;
+    private boolean isCalculating = false;
 
     @Override
     public void initialize(Defaults defaults)
@@ -63,8 +65,16 @@ public class DeltaCandleColor extends Study
         Instrument instrument = series.getInstrument();
 
         int startIndex = 1;
-        TickOperation calculator = new DeltaCalculator(startIndex, series);
+        calculator = new DeltaCalculator(startIndex, series);
+        isCalculating = true;
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+        isCalculating = false;
+    }
+
+    @Override
+    public void onTick(DataContext ctx, Tick tick) {
+        if (isCalculating || calculator == null) return;
+        calculator.onTick(tick);
     }
 
     private float getPositiveDeltaThreshold() {
@@ -99,14 +109,7 @@ public class DeltaCandleColor extends Study
             if (tick.getTime() > series.getEndTime(nextIndex)) { // Bar is complete, set color and reset delta
                 if (deltaBar.isEmpty()) return;
 
-                float deltaPercent = deltaBar.getDeltaPercent();
-                if (deltaPercent > getPositiveDeltaThreshold()) {
-                    series.setPriceBarColor(nextIndex, getSettings().getColor("PositiveDeltaColor"));
-                } else if (deltaPercent < getNegativeDeltaThreshold()) {
-                    series.setPriceBarColor(nextIndex, getSettings().getColor("NegativeDeltaColor"));
-                } else if (deltaPercent > getNeutralDeltaLowThreshold() && deltaPercent < getNeutralDeltaHighThreshold()) {
-                    series.setPriceBarColor(nextIndex, getSettings().getColor("NeutralDeltaColor"));
-                }
+                colorBar(deltaBar);
                 notifyRedraw();
 
                 series.setValue(nextIndex, "DeltaBar", deltaBar);
@@ -116,6 +119,9 @@ public class DeltaCandleColor extends Study
                 deltaBar = new DeltaBar();
                 nextIndex++;
                 nextEnd = series.getEndTime(nextIndex);
+            } else if (!isCalculating) {
+                colorBar(deltaBar);
+                notifyRedraw();
             }
 
             if (tick.isAskTick()) {
@@ -125,6 +131,17 @@ public class DeltaCandleColor extends Study
             }
             series.setInt(nextIndex, Values.DELTA, deltaBar.getDelta());
             series.setFloat(nextIndex, Values.DELTA_PERCENT, deltaBar.getDeltaPercent());
+        }
+
+        private void colorBar(DeltaBar deltaBar) {
+            float deltaPercent = deltaBar.getDeltaPercent();
+            if (deltaPercent > getPositiveDeltaThreshold()) {
+                series.setPriceBarColor(nextIndex, getSettings().getColor("PositiveDeltaColor"));
+            } else if (deltaPercent < getNegativeDeltaThreshold()) {
+                series.setPriceBarColor(nextIndex, getSettings().getColor("NegativeDeltaColor"));
+            } else if (deltaPercent > getNeutralDeltaLowThreshold() && deltaPercent < getNeutralDeltaHighThreshold()) {
+                series.setPriceBarColor(nextIndex, getSettings().getColor("NeutralDeltaColor"));
+            }
         }
     }
 }
