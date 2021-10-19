@@ -75,9 +75,9 @@ public class DeltaPivots3 extends Study
                 new String[] {"EuroSDP"}));
 
         SettingGroup sdpLineGroup = tab.addGroup("SDP Lines");
-        sdpLineGroup.addRow(new PathDescriptor("RthSDP", "RTH SDP", defaults.getYellow(), 1.0f, null, false, false, true));
-        sdpLineGroup.addRow(new PathDescriptor("GbxSDP", "Gbx SDP", defaults.getRed(), 1.0f, null, false, false, true));
-        sdpLineGroup.addRow(new PathDescriptor("EuroSDP", "Euro SDP", defaults.getBlue(), 1.0f, null, false, false, true));
+        sdpLineGroup.addRow(new PathDescriptor("RthSDP", "RTH SDP", defaults.getBlue(), 1.0f, null, false, false, true));
+        sdpLineGroup.addRow(new PathDescriptor("GbxSDP", "Gbx SDP", defaults.getYellow(), 1.0f, null, false, false, true));
+        sdpLineGroup.addRow(new PathDescriptor("EuroSDP", "Euro SDP", defaults.getRed(), 1.0f, null, false, false, true));
 
         desc.declarePath("RthSDP", "RthSDP");
         desc.declarePath("GbxSDP", "GbxSDP");
