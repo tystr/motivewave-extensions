@@ -4,6 +4,12 @@ import com.motivewave.platform.sdk.common.Tick;
 
 import java.util.*;
 
+/**
+ * This class provides convenience methods for interacting with delta over a series of prices, such as a candlestick or
+ * price bar.
+ *
+ * @author Tyler Stroud
+ */
 public class DeltaBar {
     private final Map<Float, Integer> deltasByPrice;
     private int volume = 0;
@@ -17,6 +23,12 @@ public class DeltaBar {
         volume = 0;
     }
 
+    /**
+     *
+     * @param price price is a float representing the price at which the volume was traded. Trades executed at the bid
+     *              are market sell orders.
+     * @param volumeAtBid volumeAtBid is an integer representing the volume to be added
+     */
     public void addVolumeAtBid(float price, int volumeAtBid) {
         int deltaAtPrice = deltasByPrice.getOrDefault(price, 0);
         deltaAtPrice -= volumeAtBid;
@@ -24,6 +36,12 @@ public class DeltaBar {
         volume += volumeAtBid;
     }
 
+    /**
+     *
+     * @param price price is a float representing the price at which the volume was traded. Trades executed at the ask
+     *              are market buy orders.
+     * @param volumeAtAsk volumeAtAsk is an integer representing the volume to be added
+     */
     public void addVolumeAtAsk(float price, int volumeAtAsk) {
         int deltaAtPrice = deltasByPrice.getOrDefault(price, 0);
         deltaAtPrice += volumeAtAsk;
@@ -82,6 +100,10 @@ public class DeltaBar {
         return deltasByPrice.values().stream().mapToInt(Integer::valueOf).sum();
     }
 
+    /**
+     *
+     * @return A float representing the price that contains the highest delta
+     */
     public float getDeltaPOC() {
         return Collections.max(deltasByPrice.entrySet(), Map.Entry.comparingByValue()).getKey();
     }
