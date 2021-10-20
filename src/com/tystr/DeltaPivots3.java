@@ -5,6 +5,7 @@ import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.draw.Figure;
 import com.motivewave.platform.sdk.draw.Line;
 import com.motivewave.platform.sdk.draw.Marker;
+import com.motivewave.platform.sdk.order_mgmt.OrderContext;
 import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.RuntimeDescriptor;
 import com.motivewave.platform.sdk.study.Study;
@@ -33,6 +34,8 @@ public class DeltaPivots3 extends Study
     enum Values { DELTA };
     private ArrayList<Line> lines;
 
+    private SDPCalculator calculator;
+    private boolean isCalculating;
 
     @Override
     public void initialize(Defaults defaults)
@@ -98,8 +101,21 @@ public class DeltaPivots3 extends Study
             startIndex = i;
             if (series.getStartTime(i) < threshold) break;
         }
-        TickOperation calculator = new SDPCalculator(startIndex, series, ctx.getDefaults());
+        calculator = new SDPCalculator(startIndex, series, ctx.getDefaults());
+        isCalculating = true;
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+        isCalculating = false;
+    }
+
+    @Override
+    public void onTick(DataContext ctx, Tick tick) {
+        if (isCalculating || calculator == null) return;
+        calculator.onTick(tick);
+    }
+
+    @Override
+    public void onBarClose(OrderContext ctx) {
+        return; // noop - this prevents a problem where things get redrawn improperly
     }
 
     class Window {
@@ -238,6 +254,13 @@ public class DeltaPivots3 extends Study
 
         private void colorBars() {
             Color barColor = maxDeltaWindowSum > 0 ? defaults.getGreen() : defaults.getRed();
+
+//            Marker arrow = new Marker(new Coordinate(series.getStartTime(maxDeltaWindowStartIndex), series.getLow(maxDeltaWindowStartIndex) - 8), Enums.MarkerType.TRIANGLE);
+//            arrow.setSize(Enums.Size.MEDIUM);
+//            arrow.setFillColor(defaults.getRed());
+//            arrow.setTextValue(currentSession + " SDP Window");
+//            addFigure(Plot.PRICE, arrow);
+
             for (int i = maxDeltaWindowStartIndex; i < (maxDeltaWindowStartIndex + getRollingWindowSizeForSession(currentSession)); i++) {
 //                series.setPriceBarColor(i, getSettings().getColor("WindowBarColor"));
                 series.setPriceBarColor(i, barColor); // @todo set this on delta %
@@ -279,8 +302,9 @@ public class DeltaPivots3 extends Study
         }
 
         public void onTick(Tick tick) {
+
             if (series.isComplete(series.findIndex(tick.getTime()))) {
-                return; // nothing to do if this index is complete
+                //return; // nothing to do if this index is complete
             }
             long tickTime = tick.getTime();
             Instrument instrument = series.getInstrument();
@@ -333,6 +357,12 @@ public class DeltaPivots3 extends Study
             }
 
             if (tickTime >= series.getEndTime(nextIndex)){
+//                debug("nextIndex: " + nextIndex + " tickTimeIndex: " + series.findIndex(tickTime));
+//                debug("barclose " + nextIndex + " GBX: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(gbxStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(gbxEnd), ZoneId.of("UTC")));
+//                debug("barclose EURO: " + nextIndex + ZonedDateTime.ofInstant(Instant.ofEpochMilli(euroStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(euroEnd), ZoneId.of("UTC")));
+//                debug("barclose RTH: " + nextIndex + ZonedDateTime.ofInstant(Instant.ofEpochMilli(rthStart), ZoneId.of("UTC")) + " -> " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(rthEnd), ZoneId.of("UTC")));
+//                debug("tickTime: " + tickTime + " insideWindow: " + insideWindow + " currentSession: " + currentSession);
+
                 // Bar close inside session window, do rolling window calc if we have delta
                 if (insideWindow && !deltaByPrice.isEmpty()) {
                     calculateRollingWindow();
@@ -345,16 +375,16 @@ public class DeltaPivots3 extends Study
 
                 // DEBUG: plot arrow marking end of session/period
                 if (getSettings().getBoolean("HighlightWindows")) {
-                    Marker arrow = new Marker(new Coordinate(series.getStartTime(nextIndex), series.getClose(nextIndex) - 8), Enums.MarkerType.TRIANGLE);
+                    Marker arrow = new Marker(new Coordinate(series.getStartTime(nextIndex), series.getClose(nextIndex) - 16), Enums.MarkerType.TRIANGLE);
                     arrow.setSize(Enums.Size.LARGE);
                     arrow.setFillColor(defaults.getRed());
-                    arrow.setTextValue(currentSession);
+                    arrow.setTextValue(currentSession + "XXX");
                     addFigure(Plot.PRICE, arrow);
                 }
 
                 // color bars
 //                debug("max delta for session " + currentSession + " starts at index " + maxDeltaWindowStartIndex);
-//                debug("maxDeltaWindowSTartTime:" + ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(maxDeltaWindowStartIndex)), ZoneId.of("UTC")));
+                debug("Session: " + currentSession + " - maxDeltaWindowStartTime: " + ZonedDateTime.ofInstant(Instant.ofEpochMilli(series.getStartTime(maxDeltaWindowStartIndex)), ZoneId.of("UTC")));
 
                 colorBars();
 
