@@ -1,4 +1,4 @@
-package study_examples;
+package com.tystr;
 
 import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
@@ -22,13 +22,13 @@ import java.util.List;
  */
 @StudyHeader(
         namespace = "com.tystr",
-        id = "TYSTX_MACD_ADX_PINCH",
+        id = "TYSTR_MACD_ADX_PINCH",
         rb = "study_examples.nls.strings", // locale specific strings are loaded from here
         name = "MACD / ADX Pinch",
-        desc = "MACD / ADX Pinch",
+        desc = "This study provides a visual indicator when MACD and ADX values are at extremes and begin to reverse",
         overlay = true,
         signals = true)
-public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
+public class MacdAdxPinch extends com.motivewave.platform.sdk.study.Study {
     enum Values {MA, MACD, SIGNAL, HIST, RSI, UP, DOWN, ADX, PDI, NDI, DX, PDM, NDM, TR, HIST_ADX}
 
     ;
