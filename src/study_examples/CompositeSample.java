@@ -1,20 +1,7 @@
 package study_examples;
 
 import com.motivewave.platform.sdk.common.*;
-import com.motivewave.platform.sdk.common.desc.BarDescriptor;
-import com.motivewave.platform.sdk.common.desc.BarSizeDescriptor;
-import com.motivewave.platform.sdk.common.desc.BooleanDescriptor;
-import com.motivewave.platform.sdk.common.desc.ColorDescriptor;
-import com.motivewave.platform.sdk.common.desc.EnabledDependency;
-import com.motivewave.platform.sdk.common.desc.GuideDescriptor;
-import com.motivewave.platform.sdk.common.desc.IndicatorDescriptor;
-import com.motivewave.platform.sdk.common.desc.InputDescriptor;
-import com.motivewave.platform.sdk.common.desc.IntegerDescriptor;
-import com.motivewave.platform.sdk.common.desc.MAMethodDescriptor;
-import com.motivewave.platform.sdk.common.desc.MarkerDescriptor;
-import com.motivewave.platform.sdk.common.desc.PathDescriptor;
-import com.motivewave.platform.sdk.common.desc.ShadeDescriptor;
-import com.motivewave.platform.sdk.common.desc.ValueDescriptor;
+import com.motivewave.platform.sdk.common.desc.*;
 import com.motivewave.platform.sdk.draw.Marker;
 import com.motivewave.platform.sdk.study.Plot;
 import com.motivewave.platform.sdk.study.StudyHeader;
@@ -28,6 +15,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.LinkedList;
+import java.util.List;
 
 /**
  * Combines a MACD, Moving Average and RSI into one study.
@@ -59,39 +47,32 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
     final static String RSI_PERIOD = "rsiPeriod";
     final static String RSI_INPUT = "rsiInput";
     final static String RSI_METHOD = "rsiMethod";
-
+    final static String ADX_PERIOD = "adxPeriod";
     final static String MACD_LINE = "macdLine";
     final static String MACD_IND = "macdInd";
     final static String HIST_IND = "histInd";
 
-    final static String RSI_PLOT = "RSIPlot";
-
     @Override
     public void initialize(Defaults defaults) {
         var sd = createSD();
-        var tab = sd.addTab(get("TAB_MA"));
 
-        var inputs = tab.addGroup(get("LBL_INPUTS"));
-        inputs.addRow(new BarSizeDescriptor(Inputs.BARSIZE, get("LBL_BAR_SIZE"), BarSize.getBarSize(5)));
-        inputs.addRow(new InputDescriptor(MA_INPUT, get("LBL_INPUT"), Enums.BarInput.CLOSE));
-        inputs.addRow(new IntegerDescriptor(MA_PERIOD, get("LBL_PERIOD"), 20, 1, 9999, 1),
-                new IntegerDescriptor(Inputs.SHIFT, get("LBL_SHIFT"), 0, -999, 999, 1));
-        inputs.addRow(new BooleanDescriptor(Inputs.FILL_FORWARD, get("LBL_FILL_FORWARD"), true));
+        SettingTab tab;
+        SettingGroup inputs;
 
-        var colors = tab.addGroup(get("LBL_DISPLAY"));
-        colors.addRow(new PathDescriptor(Inputs.PATH, get("LBL_LINE"), null, 1.0f, null, true, true, false));
-        colors.addRow(new IndicatorDescriptor(Inputs.IND, get("LBL_INDICATOR"), null, null, false, true, true));
+        tab = sd.addTab("Thresholds");
+        inputs = tab.addGroup("Inputs");
 
-        var barColors = tab.addGroup(get("LBL_BAR_COLOR"));
-        barColors.addRow(new BooleanDescriptor(Inputs.ENABLE_BAR_COLOR, get("LBL_ENABLE_BAR_COLOR"), false));
-        barColors.addRow(new ColorDescriptor(Inputs.UP_COLOR, get("LBL_UP_COLOR"), defaults.getGreenLine()));
-        barColors.addRow(new ColorDescriptor(Inputs.NEUTRAL_COLOR, get("LBL_NEUTRAL_COLOR"), defaults.getLineColor()));
-        barColors.addRow(new ColorDescriptor(Inputs.DOWN_COLOR, get("LBL_DOWN_COLOR"), defaults.getRedLine()));
+        inputs.addRow(new DoubleDescriptor("macdThreshold", "MACD Threshold", -1, -9999, 9999, 0.1d));
+        inputs.addRow(new DoubleDescriptor("adxThreshold", "ADX Threshold", 12, -100, 100, 1));
+        inputs.addRow(new DoubleDescriptor("rsiThreshold", "RSI Threshold", 25, -100, 100, 0.1d));
 
-        sd.addDependency(new EnabledDependency(Inputs.ENABLE_BAR_COLOR, Inputs.UP_COLOR, Inputs.NEUTRAL_COLOR, Inputs.DOWN_COLOR));
+        inputs = tab.addGroup("Display");
+        inputs.addRow(new IntegerDescriptor("pinchOffsetTicks", "Pinch Offset below low (ticks)", 4, -9999, 9999, 1));
+        inputs.addRow(new IntegerDescriptor("pinchRsiOffsetTicks", "RSI Extreme Offset below low (ticks)", 6, -9999, 9999, 1));
+
+        // MACD
 
         tab = sd.addTab(get("TAB_MACD"));
-
         inputs = tab.addGroup(get("LBL_INPUTS"));
         inputs.addRow(new InputDescriptor(MACD_INPUT, get("LBL_INPUT"), Enums.BarInput.CLOSE));
         inputs.addRow(new MAMethodDescriptor(MACD_METHOD, get("LBL_METHOD"), Enums.MAMethod.EMA));
@@ -121,66 +102,46 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
         guides.addRow(mg);
         guides.addRow(new GuideDescriptor(Inputs.BOTTOM_GUIDE, get("LBL_BOTTOM_GUIDE"), 30, 1, 100, 1, true));
 
+        // ADX
+        tab = sd.addTab("ADX");
+        inputs = tab.addGroup("Inputs");
+        inputs.addRow(new IntegerDescriptor(ADX_PERIOD, "Period (bars)", 14, 0, Integer.MAX_VALUE, 1));
+
+        // RSI
+
+        tab = sd.addTab("RSI");
+        inputs = tab.addGroup("Inputs");
+        inputs.addRow(new InputDescriptor(RSI_INPUT, "Input", Enums.BarInput.CLOSE));
+        inputs.addRow(new MAMethodDescriptor(RSI_METHOD, "Method", Enums.MAMethod.SMMA));
+        inputs.addRow(new IntegerDescriptor(RSI_PERIOD, "Period (bars)", 14, 0, Integer.MAX_VALUE, 1));
+
         var desc = createRD();
         desc.exportValue(new ValueDescriptor(Values.MA, "MA", new String[]{MA_INPUT, MA_PERIOD, Inputs.SHIFT, Inputs.BARSIZE}));
         desc.exportValue(new ValueDescriptor(Values.RSI, get("LBL_RSI"), new String[]{RSI_INPUT, RSI_PERIOD}));
         desc.exportValue(new ValueDescriptor(Values.MACD, get("LBL_MACD"), new String[]{MACD_INPUT, MACD_METHOD, MACD_PERIOD1, MACD_PERIOD2}));
         desc.exportValue(new ValueDescriptor(Values.SIGNAL, get("LBL_MACD_SIGNAL"), new String[]{Inputs.SIGNAL_PERIOD}));
-        desc.exportValue(new ValueDescriptor(Values.HIST, get("LBL_MACD_HIST"), new String[]{MACD_PERIOD1, MACD_PERIOD2, Inputs.SIGNAL_PERIOD}));
+//        desc.exportValue(new ValueDescriptor(Values.HIST, get("LBL_MACD_HIST"), new String[]{MACD_PERIOD1, MACD_PERIOD2, Inputs.SIGNAL_PERIOD}));
 
         desc.declareSignal(Signals.CROSS_ABOVE, get("LBL_CROSS_ABOVE_SIGNAL"));
         desc.declareSignal(Signals.CROSS_BELOW, get("LBL_CROSS_BELOW_SIGNAL"));
         desc.declareSignal(Signals.RSI_TOP, get("RSI_TOP"));
         desc.declareSignal(Signals.RSI_BOTTOM, get("RSI_BOTTOM"));
 
-//        // Price plot (moving average)
-        desc.getPricePlot().setLabelSettings(MA_INPUT, MA_PERIOD, Inputs.SHIFT, Inputs.BARSIZE);
-        desc.getPricePlot().setLabelPrefix("MA");
-        desc.getPricePlot().declarePath(Values.MA, Inputs.PATH);
-        desc.getPricePlot().declareIndicator(Values.MA, Inputs.IND);
-        // This tells MotiveWave that the MA values come from the data series defined by "BARSIZE"
-        desc.setValueSeries(Values.MA, Inputs.BARSIZE);
-
         // Default Plot (MACD)
-        desc.setLabelSettings(MACD_INPUT, MACD_METHOD, MACD_PERIOD1, MACD_PERIOD2, Inputs.SIGNAL_PERIOD);
-        desc.setLabelPrefix("MACD");
-        desc.setTabName("MACD");
-        desc.declarePath(Values.MACD, MACD_LINE);
-        desc.declarePath(Values.SIGNAL, Inputs.SIGNAL_PATH);
-        desc.declareBars(Values.HIST, Inputs.BAR);
-        desc.declareIndicator(Values.MACD, MACD_IND);
-        desc.declareIndicator(Values.SIGNAL, Inputs.SIGNAL_IND);
-        desc.declareIndicator(Values.HIST, HIST_IND);
-        desc.setRangeKeys(Values.MACD, Values.SIGNAL, Values.HIST);
-        desc.addHorizontalLine(new LineInfo(0, null, 1.0f, new float[]{3, 3}));
+//        desc.setLabelSettings(MACD_INPUT, MACD_METHOD, MACD_PERIOD1, MACD_PERIOD2, Inputs.SIGNAL_PERIOD);
+//        desc.setLabelPrefix("MACD");
+//        desc.setTabName("MACD");
+//        desc.declarePath(Values.MACD, MACD_LINE);
+//        desc.declarePath(Values.SIGNAL, Inputs.SIGNAL_PATH);
+//        desc.declareBars(Values.HIST, Inputs.BAR);
+//        desc.declareIndicator(Values.MACD, MACD_IND);
+//        desc.declareIndicator(Values.SIGNAL, Inputs.SIGNAL_IND);
+//        desc.declareIndicator(Values.HIST, HIST_IND);
+//        desc.setRangeKeys(Values.MACD, Values.SIGNAL, Values.HIST);
+//        desc.addHorizontalLine(new LineInfo(0, null, 1.0f, new float[]{3, 3}));
 
-        sd.addQuickSettings(RSI_INPUT);
+        sd.addQuickSettings("macdThreshold", "adxThreshold", "rsiThreshold");
     }
-//
-//    // Since the Moving Average (MA) is plotted on a different data series, we need to override this method
-//    // and manually compute the MA for the secondary data series.
-//    @Override
-//    protected void calculateValues(DataContext ctx) {
-////        int maPeriod = getSettings().getInteger(MA_PERIOD);
-////        Object maInput = getSettings().getInput(MA_INPUT, Enums.BarInput.CLOSE);
-////        var barSize = getSettings().getBarSize(Inputs.BARSIZE);
-////        var series2 = ctx.getDataSeries(barSize);
-////
-////        StudyHeader header = getHeader();
-////        boolean updates = getSettings().isBarUpdates() || (header != null && header.requiresBarUpdates());
-////
-////        // Calculate Moving Average for the Secondary Data Series
-////        for (int i = 1; i < series2.size(); i++) {
-////            if (series2.isComplete(i)) continue;
-////            if (!updates && !series2.isBarComplete(i)) continue;
-////            Double sma = series2.ma(Enums.MAMethod.SMA, i, maPeriod, maInput);
-////            series2.setDouble(i, Values.MA, sma);
-////        }
-//
-//        // Invoke the parent method to run the "calculate" method below for the primary (chart) data series
-//        super.calculateValues(ctx);
-//    }
-
 
     private void calculateMACD(int index, DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
@@ -226,15 +187,12 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
             complete = false;
             series.setBoolean(index, "HasMACD", false);
         }
-
-
-
     }
 
     private void calculateRSI(int index, DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
-        int rsiPeriod = 14; //getSettings().getInteger(RSI_PERIOD);
-        Object rsiInput = Enums.BarInput.CLOSE;
+        int rsiPeriod = getSettings().getInteger(RSI_PERIOD);
+        Object rsiInput = getSettings().getInput(RSI_INPUT, Enums.BarInput.CLOSE);
         if (index < 1) return; // not enough data
 //
         double diff = series.getDouble(index, rsiInput) - series.getDouble(index - 1, rsiInput);
@@ -247,9 +205,8 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
 
         if (index <= rsiPeriod + 1) return;
 
-//        var method = getSettings().getMAMethod(RSI_METHOD);
-
-        Enums.MAMethod method = Enums.MAMethod.SMMA;
+        Enums.MAMethod method = getSettings().getMAMethod(RSI_METHOD);
+        //Enums.MAMethod method = Enums.MAMethod.SMMA;
 
         double avgUp = series.ma(method, index, rsiPeriod, Values.UP);
         double avgDown = series.ma(method, index, rsiPeriod, Values.DOWN);
@@ -330,8 +287,10 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
         calculateRSI(index, ctx);
 
         if (series.getBoolean(index, "HasMACD") && series.getBoolean(index, "HasADX")) {
-            double macdThreshold = -1;
-            double adxThreshold = 12;
+//            double macdThreshold = -1;
+            double macdThreshold = getSettings().getDouble("macdThreshold");
+            double adxThreshold = getSettings().getDouble("adxThreshold"); // 12;
+            double rsiThreshold = getSettings().getDouble("rsiThreshold"); // 25;
             double macdOptimalThreshold = -1;
             double adxOptimalThreshold = 40;
 
@@ -344,6 +303,10 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
 
             if (macd < macdThreshold && adx > adxThreshold) {
                 // we are pinching
+
+                if (!series.getBoolean(index, "Pinching")) {
+                    System.err.println("BEGIN PINCHING at index " + index);
+                }
                 series.setBoolean(index, "Pinching", true);
                 int lookbackStart = index - 5;
                 if (lookbackStart < series.getStartIndex()) return; // not enough bars
@@ -374,8 +337,8 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
                     double macdSlope = (macd - series.getDouble(index - 1, Values.MACD)) / (series.getEndTime(index - 1) - series.getEndTime(index));
                     adxSlope = adxSlope * 10000;
                     macdSlope = macdSlope * 10000;
-                    debug("CALCULATED ADX SLOPE: (" + series.getDouble(index-1, Values.ADX) + ") (" + adx + "): "+adxSlope);
-                    debug("CALCULATED MACD SLOPE: (" + series.getDouble(index-1, Values.MACD) + ") (" + macd+ "): "+macdSlope);
+                    System.err.println("CALCULATED ADX SLOPE: (" + series.getDouble(index-1, Values.ADX) + ") (" + adx + "): "+adxSlope);
+                    System.err.println("CALCULATED MACD SLOPE: (" + series.getDouble(index-1, Values.MACD) + ") (" + macd+ "): "+macdSlope);
 
 
 //                    java.util.List<Point2D> points = new LinkedList<>();
@@ -393,34 +356,36 @@ public class CompositeSample extends com.motivewave.platform.sdk.study.Study {
                 }
 
                 double rsi = series.getDouble(index, Values.RSI);
+                int pinchOffset = getSettings().getInteger("pinchOffsetTicks");
+                int pinchRsiOffset = getSettings().getInteger("pinchRsiOffsetTicks");
 
-                if (rsi < 15) {
-                    Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 2), Enums.MarkerType.SQUARE);
+                if (rsi < rsiThreshold) {
+                    Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchRsiOffset), Enums.MarkerType.SQUARE);
                     square.setFillColor(Color.YELLOW.darker());
                     square.setOutlineColor(Color.YELLOW.darker());
                     square.setSize(Enums.Size.MEDIUM);
                     addFigure(Plot.PRICE, square);
-
                 }
 
                 if (crossedAbove(series, index, Values.MACD, Values.SIGNAL)) {
                     // plot signal arrow
-                    Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 1), Enums.MarkerType.ARROW);
+                    Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchOffset), Enums.MarkerType.ARROW);
                     series.setPriceBarColor(index, Color.GREEN.darker());
                     signalArrow.setFillColor(Color.GREEN.darker());
                     signalArrow.setOutlineColor(Color.GREEN.darker());
-                    signalArrow.setSize(Enums.Size.LARGE);
+                    signalArrow.setSize(Enums.Size.SMALL);
                     addFigure(Plot.PRICE, signalArrow);
                 } else if (macdSlopeUp && adxSlopeDown) {
+                    System.err.println("PINCH RELEASING at index " + index);
                     // plot squares highlighting the pinch release
-                    Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 1), Enums.MarkerType.SQUARE);
+                    Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchOffset), Enums.MarkerType.SQUARE);
                     square.setFillColor(Color.GREEN.darker());
                     square.setOutlineColor(Color.GREEN.darker());
                     square.setSize(Enums.Size.MEDIUM);
                     addFigure(Plot.PRICE, square);
                 } else {
                     // plot squares highlighting the pinching
-                    Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 1), Enums.MarkerType.SQUARE);
+                    Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchOffset), Enums.MarkerType.SQUARE);
                     square.setFillColor(Color.GRAY);
                     square.setOutlineColor(Color.GRAY);
                     square.setSize(Enums.Size.MEDIUM);
