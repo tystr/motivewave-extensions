@@ -2,3 +2,4 @@ dev
 build/classes
 .last_updated
 .idea
+.run
