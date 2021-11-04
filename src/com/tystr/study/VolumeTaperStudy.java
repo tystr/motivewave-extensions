@@ -10,6 +10,8 @@ import com.motivewave.platform.sdk.common.Coordinate;
 import com.motivewave.platform.sdk.common.DataContext;
 import com.motivewave.platform.sdk.common.Defaults;
 import com.motivewave.platform.sdk.common.Enums;
+
+import javax.swing.text.html.Option;
 import java.util.*;
 
 @StudyHeader(
@@ -26,16 +28,40 @@ import java.util.*;
 public class VolumeTaperStudy extends Study {
     private boolean isCalculating = false;
     private VolumeTaperCalculator calculator;
+    enum Values {VOLUME_TAPER}
+
+    private final String BULLISH_BAR_MIN_PRICES = "UpNumPrices";
+    private final String BEARISH_BAR_MIN_PRICES = "DownNumPrices";
+    private final String MIN_BULLISH_BAR_SIZE = "MinBullishBarSize";
+    private final String MIN_BEARISH_BAR_SIZE = "MinBearishBarSize";
+    private final String SHOW_DELTA_TRIGGERS = "showDeltaTriggers";
+    private final String BEARISH_DELTA_PERCENT_THRESHOLD = "bearishDeltaPercentThreshold";
+    private final String BULLISH_DELTA_PERCENT_THRESHOLD = "bullishDeltaPercentThreshold";
+    private final String OFFSET_ABOVE_IN_TICKS = "offsetAboveInTicks";
+    private final String OFFSET_BELOW_IN_TICKS = "offsetBelowInTicks";
 
     @Override
     public void initialize(Defaults defaults) {
         SettingsDescriptor sd = createSD();
         SettingTab tab = sd.addTab("General");
-        SettingGroup group = tab.addGroup("Inputs");
+        SettingGroup group;
+
+        group = tab.addGroup("Inputs");
         group.addRow(new IntegerDescriptor("UpNumPrices", "Up Bar Number Of Prices", 3, 1, 9999, 1));
         group.addRow(new IntegerDescriptor("DownNumPrices", "Down Bar Number Of Prices", 3, 1, 9999, 1));
+        group.addRow(new IntegerDescriptor("MinBarSize", "Minimum Size of Bar (ticks)", 5, 1, 9999, 1));
 
-        sd.addQuickSettings("UpNumPrices","DownNumPrices");
+        group.addRow(new BooleanDescriptor(SHOW_DELTA_TRIGGERS, "Show Delta Triggers", false, false));
+        group.addRow(new DoubleDescriptor(BEARISH_DELTA_PERCENT_THRESHOLD, "Bearish Delta % Threshold", -0.10, -1, 1, 0.01));
+        group.addRow(new DoubleDescriptor(BULLISH_DELTA_PERCENT_THRESHOLD, "Bearish Delta % Threshold", 0.10, -1, 1, 0.01));
+
+        sd.addDependency(new EnabledDependency(SHOW_DELTA_TRIGGERS, BEARISH_DELTA_PERCENT_THRESHOLD, BULLISH_DELTA_PERCENT_THRESHOLD));
+
+        group = tab.addGroup("Display");
+        group.addRow(new IntegerDescriptor(OFFSET_ABOVE_IN_TICKS, "Offset Above (ticks)", 2, 1, 9999, 1));
+        group.addRow(new IntegerDescriptor(OFFSET_BELOW_IN_TICKS, "Offset Below (ticks)", 2, 1, 9999, 1));
+
+        sd.addQuickSettings("UpNumPrices","DownNumPrices", "MinBarSize", BEARISH_DELTA_PERCENT_THRESHOLD, OFFSET_ABOVE_IN_TICKS, OFFSET_BELOW_IN_TICKS);
     }
 
 
@@ -55,6 +81,8 @@ public class VolumeTaperStudy extends Study {
         public void onTick(Tick tick) {
             if (tick.getTime() > series.getEndTime(index)) {
                 calculateTaper();
+                series.setComplete(index);
+                calculateFollowThrough();
                 reset();
                 index++;
             }
@@ -80,52 +108,82 @@ public class VolumeTaperStudy extends Study {
             }
         }
 
+        public void calculateFollowThrough() {
+            if (!getSettings().getBoolean(SHOW_DELTA_TRIGGERS)) return;
+            int numBarsToEvaluate = 1;
+            if (index - numBarsToEvaluate < 0) return; // not enough bars
+
+            if (null != series.getBoolean(index - 1, Values.VOLUME_TAPER) && series.getBoolean(index - 1, Values.VOLUME_TAPER)) {
+                float delta = deltaByPrice.values().stream().mapToInt(Integer::valueOf).sum();
+                float deltaPercent = delta / series.getVolume(index);
+                if (isBarCloseUp(index-1, series)) {
+
+                    if (!(deltaPercent < getSettings().getDouble(BEARISH_DELTA_PERCENT_THRESHOLD))) return;
+                    Marker marker = new Marker(new Coordinate(series.getStartTime(index), series.getHigh(index) + 2), Enums.MarkerType.SQUARE);
+                    marker.setSize(Enums.Size.LARGE);
+                    marker.setFillColor(getDataContext().getDefaults().getRed());
+                    marker.setOutlineColor(getDataContext().getDefaults().getRed());
+//                    marker.setTextValue("Delta %: " + deltaPercent);
+                    addFigure(Plot.PRICE, marker);
+                } else {
+                    if (!(deltaPercent > getSettings().getDouble(BULLISH_DELTA_PERCENT_THRESHOLD))) return;
+                    Marker marker = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 2 ), Enums.MarkerType.SQUARE);
+                    marker.setSize(Enums.Size.LARGE);
+                    marker.setFillColor(getDataContext().getDefaults().getGreen());
+                    marker.setOutlineColor(getDataContext().getDefaults().getGreen());
+//                    marker.setTextValue("Delta %: " + deltaPercent);
+                    addFigure(Plot.PRICE, marker);
+                }
+            }
+        }
+
         public void calculateTaper() {
+            series.setBoolean(index, Values.VOLUME_TAPER, false);
+            if (!evaluateBarSize()) return;
+
             if (isBarCloseUp(index, series)) {
                 if (!evaluateHigh()) return;
                 if (!evaluateUpTaper()) return;
 
-                Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getHigh(index) + 2), Enums.MarkerType.CIRCLE);
+                Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getHigh(index) + getSettings().getInteger(OFFSET_ABOVE_IN_TICKS)), Enums.MarkerType.CIRCLE);
                 arrow.setSize(Enums.Size.LARGE);
                 arrow.setFillColor(getDataContext().getDefaults().getRed());
                 arrow.setOutlineColor(getDataContext().getDefaults().getRed());
                 addFigure(Plot.PRICE, arrow);
                 notifyRedraw();
+                series.setBoolean(index, Values.VOLUME_TAPER, true);
             } else {
                 if (!evaluateLow()) return;
                 if (!evaluateDownTaper()) return;
 
-                Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - 2), Enums.MarkerType.CIRCLE);
+                Marker arrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - getSettings().getInteger(OFFSET_BELOW_IN_TICKS)), Enums.MarkerType.CIRCLE);
                 arrow.setSize(Enums.Size.LARGE);
                 arrow.setFillColor(getDataContext().getDefaults().getGreen());
                 arrow.setOutlineColor(getDataContext().getDefaults().getGreen());
                 addFigure(Plot.PRICE, arrow);
+                series.setBoolean(index, Values.VOLUME_TAPER, true);
                 notifyRedraw();
             }
+        }
+
+        private boolean evaluateBarSize() {
+            int minBarSize = getSettings().getInteger("MinBarSize");
+            double barBreadthInTicks = (series.getHigh(index) - series.getLow(index)) / series.getInstrument().getTickSize();
+            return barBreadthInTicks >= minBarSize;
         }
 
         private boolean evaluateHigh() {
             float high = series.getHigh(index);
             int threshold = 0;
 
-            boolean isTrue = bidByPrice.getOrDefault(high, 0) <= threshold;
-            if (isTrue) {
-                System.err.println("Bar High " + high + " has bid of " + bidByPrice.getOrDefault(high, 0));
-            }
-
-            return isTrue;
+            return bidByPrice.getOrDefault(high, 0) <= threshold;
         }
 
         private boolean evaluateLow() {
             float low = series.getLow(index);
             int threshold = 0;
 
-            boolean isTrue = askByPrice.getOrDefault(low, 0) <= threshold;
-            if (isTrue) {
-                System.err.println("Bar Low " + low + " has ask of " + askByPrice.getOrDefault(low, 0));
-            }
-
-            return isTrue;
+            return askByPrice.getOrDefault(low, 0) <= threshold;
         }
 
         private boolean evaluateUpTaper() {
@@ -133,29 +191,11 @@ public class VolumeTaperStudy extends Study {
             float high = series.getHigh(index);
             int numberOfPrices = getSettings().getInteger("UpNumPrices");
             int lastBid = bidByPrice.getOrDefault(high, 0);
-
-            float lastPrice = high;
-            for (int i = 1; i < numberOfPrices; i++) {
-                lastPrice = lastPrice - increment;
-                int bid = bidByPrice.getOrDefault(lastPrice, 0);
-                if (!(bid > lastBid)) {
-                    // @todo make this more intelligent than just greater than check
-                    return false;
-                }
-
-                lastBid = bid;
-            }
-            return true;
-        }
-
-        private boolean evaluateDownTaper() {
-            float increment = (float)series.getInstrument().getTickSize();
-            float high = series.getHigh(index);
-            int numberOfPrices = getSettings().getInteger("DownNumPrices");
+            if (lastBid > 0) return false;
             int lastAsk = askByPrice.getOrDefault(high, 0);
 
             float lastPrice = high;
-            for (int i = 1; i < numberOfPrices; i++) {
+            for (int i = 0; i < numberOfPrices; i++) {
                 lastPrice = lastPrice - increment;
                 int ask = askByPrice.getOrDefault(lastPrice, 0);
                 if (!(ask > lastAsk)) {
@@ -164,6 +204,28 @@ public class VolumeTaperStudy extends Study {
                 }
 
                 lastAsk = ask;
+            }
+            return true;
+        }
+
+        private boolean evaluateDownTaper() {
+            float increment = (float)series.getInstrument().getTickSize();
+            float high = series.getHigh(index);
+            int numberOfPrices = getSettings().getInteger("DownNumPrices");
+            int lastAsk = bidByPrice.getOrDefault(high, 0);
+            if (lastAsk > 0) return false;
+            int lastBid = bidByPrice.getOrDefault(high, 0);
+
+            float lastPrice = high;
+            for (int i = 0; i < numberOfPrices; i++) {
+                lastPrice = lastPrice - increment;
+                int bid = bidByPrice.getOrDefault(lastPrice, 0);
+                if (!(bid > lastBid)) {
+                    // @todo make this more intelligent than just greater than check
+                    return false;
+                }
+
+                lastBid = bid;
             }
             return true;
         }
@@ -184,7 +246,7 @@ public class VolumeTaperStudy extends Study {
         DataSeries series = ctx.getDataSeries();
         Instrument instrument = series.getInstrument();
 
-        int maxDays = 10; // @todo configure this
+        int maxDays = 100; // @todo configure this
         int startIndex = 1;
         long threshold = instrument.getStartOfDay(series.getStartTime(), ctx.isRTH()) - ((maxDays + 1) * Util.MILLIS_IN_DAY);
         for (int i = series.size() - 1; i > 0; i--) {
