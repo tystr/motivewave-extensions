@@ -27,6 +27,7 @@ import java.util.*;
 
 public class VolumeTaperStudy extends Study {
     private boolean isCalculating = false;
+    private boolean calculated = false;
     private VolumeTaperCalculator calculator;
     enum Values {VOLUME_TAPER}
 
@@ -150,7 +151,6 @@ public class VolumeTaperStudy extends Study {
                 arrow.setFillColor(getDataContext().getDefaults().getRed());
                 arrow.setOutlineColor(getDataContext().getDefaults().getRed());
                 addFigure(Plot.PRICE, arrow);
-                notifyRedraw();
                 series.setBoolean(index, Values.VOLUME_TAPER, true);
             } else {
                 if (!evaluateLow()) return;
@@ -162,7 +162,6 @@ public class VolumeTaperStudy extends Study {
                 arrow.setOutlineColor(getDataContext().getDefaults().getGreen());
                 addFigure(Plot.PRICE, arrow);
                 series.setBoolean(index, Values.VOLUME_TAPER, true);
-                notifyRedraw();
             }
         }
 
@@ -244,19 +243,16 @@ public class VolumeTaperStudy extends Study {
     @Override
     protected void calculateValues(DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
+        if (series.size() == 0 || isCalculating) return;
         Instrument instrument = series.getInstrument();
 
-        int maxDays = 100; // @todo configure this
         int startIndex = 1;
-        long threshold = instrument.getStartOfDay(series.getStartTime(), ctx.isRTH()) - ((maxDays + 1) * Util.MILLIS_IN_DAY);
-        for (int i = series.size() - 1; i > 0; i--) {
-            startIndex = i;
-            if (series.getStartTime(i) < threshold) break;
-        }
         calculator = new VolumeTaperCalculator(startIndex, series);
         isCalculating = true;
         instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
         isCalculating = false;
+        calculated = true;
+        notifyRedraw();
     }
 
     @Override
