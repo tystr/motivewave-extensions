@@ -92,6 +92,7 @@ public class DeltaPivots3 extends Study
     @Override
     protected void calculateValues(DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
+        if  (series.size() == 0 || isCalculating) return;
         Instrument instrument = series.getInstrument();
 
         int maxDays = 10; // @todo configure this
@@ -101,10 +102,17 @@ public class DeltaPivots3 extends Study
             startIndex = i;
             if (series.getStartTime(i) < threshold) break;
         }
-        calculator = new SDPCalculator(startIndex, series, ctx.getDefaults());
-        isCalculating = true;
-        instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
-        isCalculating = false;
+
+        int finalStartIndex = startIndex;
+        Util.schedule(() -> {
+            try {
+                isCalculating = true;
+                calculator = new SDPCalculator(finalStartIndex, series, ctx.getDefaults());
+                instrument.forEachTick(series.getStartTime(finalStartIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+            } finally {
+                isCalculating = false;
+            }
+        });
     }
 
     @Override
