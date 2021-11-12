@@ -77,19 +77,17 @@ public class DevelopingValueArea extends Study
     @Override
     protected void calculateValues(DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
+        if (series.size() == 0 || isCalculating) return;
         Instrument instrument = series.getInstrument();
 
-        int maxDays = 10; // @todo configure this
-        int startIndex = 1;
-        long threshold = instrument.getStartOfDay(series.getStartTime(), ctx.isRTH()) - ((maxDays+1) * Util.MILLIS_IN_DAY);
-        for (int i = series.size()-1; i > 0; i--) {
-            startIndex = i;
-            if (series.getStartTime(i) < threshold) break;
-        }
-        calculator = new VPCalculator(startIndex, series, ctx.isRTH());
-        isCalculating = true;
-        instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
-        isCalculating = false;
+        Util.schedule(() -> {
+            int startIndex = 1;
+            calculator = new VPCalculator(startIndex, series, ctx.isRTH());
+            isCalculating = true;
+            instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+            isCalculating = false;
+            notifyRedraw();
+        });
     }
 
     @Override
@@ -117,12 +115,10 @@ public class DevelopingValueArea extends Study
             volumeProfile.addVolumeAtPrice(tick.isAskTick() ? tick.getAskPrice() : tick.getBidPrice(), tick.getVolume());
             if (tick.getTime() > series.getEndTime(nextIndex)) {
                 calculate();
-                notifyRedraw();
                 series.setComplete(nextIndex);
                 nextIndex++;
             } else if (!isCalculating) {
                 calculate();
-                notifyRedraw();
             }
 
             // reset if after end of timeframe (daily, weekly, etc)
