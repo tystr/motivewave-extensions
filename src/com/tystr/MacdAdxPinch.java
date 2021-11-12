@@ -280,6 +280,8 @@ public class MacdAdxPinch extends com.motivewave.platform.sdk.study.Study {
     @Override
     protected void calculate(int index, DataContext ctx) {
         var series = ctx.getDataSeries();
+        if (series.isComplete(index)) return;
+
         boolean complete = true;
 
         calculateMACD(index, ctx);
@@ -321,6 +323,18 @@ public class MacdAdxPinch extends com.motivewave.platform.sdk.study.Study {
                     if (!series.getBoolean(i, "Pinching")) return;
                 }
 
+                int pinchOffset = getSettings().getInteger("pinchOffsetTicks");
+                int pinchRsiOffset = getSettings().getInteger("pinchRsiOffsetTicks");
+
+                for (int i = index; i >= lookbackStart; i--) {
+                    // plot squares highlighting the pinching
+                    Marker square = new Marker(new Coordinate(series.getStartTime(i), series.getLow(i) - pinchOffset), Enums.MarkerType.SQUARE);
+                    square.setFillColor(Color.GRAY);
+                    square.setOutlineColor(Color.GRAY);
+                    square.setSize(Enums.Size.MEDIUM);
+                    addFigure(Plot.PRICE, square);
+                }
+
                 if (series.getBoolean(index, "Pinching")) {
                     debug("leastSquares: " + Arrays.toString(leastSquares));
                 }
@@ -356,8 +370,6 @@ public class MacdAdxPinch extends com.motivewave.platform.sdk.study.Study {
                 }
 
                 double rsi = series.getDouble(index, Values.RSI);
-                int pinchOffset = getSettings().getInteger("pinchOffsetTicks");
-                int pinchRsiOffset = getSettings().getInteger("pinchRsiOffsetTicks");
 
                 if (rsi < rsiThreshold) {
                     Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchRsiOffset), Enums.MarkerType.SQUARE);
@@ -367,15 +379,16 @@ public class MacdAdxPinch extends com.motivewave.platform.sdk.study.Study {
                     addFigure(Plot.PRICE, square);
                 }
 
-                if (crossedAbove(series, index, Values.MACD, Values.SIGNAL)) {
-                    // plot signal arrow
-                    Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchOffset), Enums.MarkerType.ARROW);
-                    series.setPriceBarColor(index, Color.GREEN.darker());
-                    signalArrow.setFillColor(Color.GREEN.darker());
-                    signalArrow.setOutlineColor(Color.GREEN.darker());
-                    signalArrow.setSize(Enums.Size.SMALL);
-                    addFigure(Plot.PRICE, signalArrow);
-                } else if (macdSlopeUp && adxSlopeDown) {
+//                if (crossedAbove(series, index, Values.MACD, Values.SIGNAL)) {
+//                    // plot signal arrow
+//                    Marker signalArrow = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchOffset), Enums.MarkerType.ARROW);
+//                    series.setPriceBarColor(index, Color.GREEN.darker());
+//                    signalArrow.setFillColor(Color.GREEN.darker());
+//                    signalArrow.setOutlineColor(Color.GREEN.darker());
+//                    signalArrow.setSize(Enums.Size.SMALL);
+//                    addFigure(Plot.PRICE, signalArrow);
+//                } else
+                    if (macdSlopeUp && adxSlopeDown) {
                     System.err.println("PINCH RELEASING at index " + index);
                     // plot squares highlighting the pinch release
                     Marker square = new Marker(new Coordinate(series.getStartTime(index), series.getLow(index) - pinchOffset), Enums.MarkerType.SQUARE);
