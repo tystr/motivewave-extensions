@@ -40,6 +40,7 @@ public class VolumeTaperStudy extends Study {
     private final String BULLISH_DELTA_PERCENT_THRESHOLD = "bullishDeltaPercentThreshold";
     private final String OFFSET_ABOVE_IN_TICKS = "offsetAboveInTicks";
     private final String OFFSET_BELOW_IN_TICKS = "offsetBelowInTicks";
+    private final String TICK_INTERVAL = "tickInterval";
 
     @Override
     public void initialize(Defaults defaults) {
@@ -52,6 +53,8 @@ public class VolumeTaperStudy extends Study {
         group.addRow(new IntegerDescriptor("DownNumPrices", "Down Bar Number Of Prices", 3, 1, 9999, 1));
         group.addRow(new IntegerDescriptor("MinBarSize", "Minimum Size of Bar (ticks)", 5, 1, 9999, 1));
 
+        group.addRow(new IntegerDescriptor(TICK_INTERVAL, "Tick Interval", 1, 1, 9999, 1));
+
         group.addRow(new BooleanDescriptor(SHOW_DELTA_TRIGGERS, "Show Delta Triggers", false, false));
         group.addRow(new DoubleDescriptor(BEARISH_DELTA_PERCENT_THRESHOLD, "Bearish Delta % Threshold", -0.10, -1, 1, 0.01));
         group.addRow(new DoubleDescriptor(BULLISH_DELTA_PERCENT_THRESHOLD, "Bearish Delta % Threshold", 0.10, -1, 1, 0.01));
@@ -62,7 +65,7 @@ public class VolumeTaperStudy extends Study {
         group.addRow(new IntegerDescriptor(OFFSET_ABOVE_IN_TICKS, "Offset Above (ticks)", 2, 1, 9999, 1));
         group.addRow(new IntegerDescriptor(OFFSET_BELOW_IN_TICKS, "Offset Below (ticks)", 2, 1, 9999, 1));
 
-        sd.addQuickSettings("UpNumPrices","DownNumPrices", "MinBarSize", BEARISH_DELTA_PERCENT_THRESHOLD, OFFSET_ABOVE_IN_TICKS, OFFSET_BELOW_IN_TICKS);
+        sd.addQuickSettings("UpNumPrices","DownNumPrices", "MinBarSize", BEARISH_DELTA_PERCENT_THRESHOLD, TICK_INTERVAL, OFFSET_ABOVE_IN_TICKS, OFFSET_BELOW_IN_TICKS);
     }
 
 
@@ -189,6 +192,8 @@ public class VolumeTaperStudy extends Study {
             float increment = (float)series.getInstrument().getTickSize();
             float high = series.getHigh(index);
             int numberOfPrices = getSettings().getInteger("UpNumPrices");
+            int tickInterval = getSettings().getInteger(TICK_INTERVAL);
+
             int lastBid = bidByPrice.getOrDefault(high, 0);
             if (lastBid > 0) return false;
             int lastAsk = askByPrice.getOrDefault(high, 0);
@@ -197,6 +202,9 @@ public class VolumeTaperStudy extends Study {
             for (int i = 0; i < numberOfPrices; i++) {
                 lastPrice = lastPrice - increment;
                 int ask = askByPrice.getOrDefault(lastPrice, 0);
+                for (int j = 0; j < tickInterval-1; j++) {
+                    ask = ask + askByPrice.getOrDefault(lastPrice - increment, 0);
+                }
                 if (!(ask > lastAsk)) {
                     // @todo make this more intelligent than just greater than check
                     return false;
@@ -209,16 +217,21 @@ public class VolumeTaperStudy extends Study {
 
         private boolean evaluateDownTaper() {
             float increment = (float)series.getInstrument().getTickSize();
-            float high = series.getHigh(index);
+            float low = series.getLow(index);
             int numberOfPrices = getSettings().getInteger("DownNumPrices");
-            int lastAsk = bidByPrice.getOrDefault(high, 0);
-            if (lastAsk > 0) return false;
-            int lastBid = bidByPrice.getOrDefault(high, 0);
+            int tickInterval = getSettings().getInteger(TICK_INTERVAL);
 
-            float lastPrice = high;
+            int lastAsk = askByPrice.getOrDefault(low, 0);
+            if (lastAsk > 0) return false;
+            int lastBid = bidByPrice.getOrDefault(low, 0);
+
+            float lastPrice = low;
             for (int i = 0; i < numberOfPrices; i++) {
-                lastPrice = lastPrice - increment;
+                lastPrice = lastPrice + increment;
                 int bid = bidByPrice.getOrDefault(lastPrice, 0);
+                for (int j = 0; j < tickInterval-1; j++) {
+                    bid = bid + bidByPrice.getOrDefault(lastPrice + increment, 0);
+                }
                 if (!(bid > lastBid)) {
                     // @todo make this more intelligent than just greater than check
                     return false;
@@ -249,7 +262,7 @@ public class VolumeTaperStudy extends Study {
         int startIndex = 1;
         calculator = new VolumeTaperCalculator(startIndex, series);
         isCalculating = true;
-        instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
+        instrument.forEachTick(series.getStartTime(startIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE*5, ctx.isRTH(), calculator);
         isCalculating = false;
         calculated = true;
         notifyRedraw();
