@@ -13,6 +13,8 @@ import com.motivewave.platform.sdk.study.StudyHeader;
 import study_examples.MyMovingAverage;
 
 import java.awt.*;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
 import java.util.List;
@@ -110,9 +112,104 @@ public class DeltaPivots3 extends Study
                 calculator = new SDPCalculator(finalStartIndex, series, ctx.getDefaults());
                 instrument.forEachTick(series.getStartTime(finalStartIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
             } finally {
+                // IF WRITE TO FILE TRUE
+                writeFile(calculator.getLastSDP());
                 isCalculating = false;
             }
         });
+    }
+
+    private void appendRow(StringBuilder builder, String symbol, float price, String note, String fColor, String bColor, String diameter) {
+        builder.append(symbol).append(",")
+                .append(price).append(",")
+                .append(note).append(",")
+                .append(fColor).append(",")
+                .append(bColor).append(",")
+                .append(diameter)
+                .append("\n");
+    }
+
+    protected void writeFile(SDPCalculator.SDP sdp) {
+
+        String filePath = "/tmp/"; // get from settings
+        StringBuilder content = new StringBuilder()
+                .append("Symbol,Price Level,Note,Foreground Color,Background Color,Diameter\n");
+
+        content.append(sdp.getInstrumentSymbol()).append(",")
+                .append(sdp.getMid()).append(",")
+                .append("SDP").append(",")
+                .append("#ffffff").append(",")
+                .append("ffa700").append(",")
+                .append("2")
+                .append("\n");
+
+        this.appendRow(
+                content,
+                sdp.getInstrumentSymbol(),
+                sdp.getExtensionAbove(100),
+                "SDP 1A",
+                "#ffffff",
+                "#5757ff",
+                "2"
+        );
+        this.appendRow(
+                content,
+                sdp.getInstrumentSymbol(),
+                sdp.getExtensionAbove(200),
+                "SDP 2A",
+                "#ffffff",
+                "#5757ff",
+                "2"
+        );
+        this.appendRow(
+                content,
+                sdp.getInstrumentSymbol(),
+                sdp.getExtensionAbove(300),
+                "SDP 3A",
+                "#ffffff",
+                "#5757ff",
+                "2"
+        );
+
+        this.appendRow(
+                content,
+                sdp.getInstrumentSymbol(),
+                sdp.getExtensionBelow(100),
+                "SDP 1B",
+                "#ffffff",
+                "#b20000",
+                "2"
+        );
+
+        this.appendRow(
+                content,
+                sdp.getInstrumentSymbol(),
+                sdp.getExtensionBelow(200),
+                "SDP 2B",
+                "#ffffff",
+                "#b20000",
+                "2"
+        );
+        this.appendRow(
+                content,
+                sdp.getInstrumentSymbol(),
+                sdp.getExtensionBelow(300),
+                "SDP 3B",
+                "#ffffff",
+                "#b20000",
+                "2"
+        );
+
+
+        System.err.println("\nFILE CONTENTS\n");
+        System.err.println(content.toString() + "\n");
+
+        try (Writer writer = new BufferedWriter(new OutputStreamWriter(
+                new FileOutputStream("/tmp/SDP_"+sdp.getInstrumentSymbol() + ".csv"), StandardCharsets.UTF_8))) {
+            writer.write(content.toString());
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+        }
     }
 
     @Override
@@ -157,6 +254,9 @@ public class DeltaPivots3 extends Study
 
         private long nextEnd;
         private long nextStart;
+
+        private long start;
+        private long end;
         private long runningVolume = 0;
 
         private int maxDeltaWindowStartIndex = 0;
@@ -174,6 +274,8 @@ public class DeltaPivots3 extends Study
         private long gbxEnd;
         private long euroStart;
         private long euroEnd;
+
+        private SDP lastSDP; // used to plot the most recent completed SDP
 
         private Defaults defaults;
 
@@ -199,12 +301,80 @@ public class DeltaPivots3 extends Study
                 return endMinute;
             }
         }
+
+        class Bar {
+            private final long start;
+            private final long end;
+            private final float open;
+            private final float high;
+            private final float low;
+            private final float close;
+
+            private int volume;
+            private int delta;
+
+            public Bar(long start, long end, float open, float high, float low, float close) {
+                this.start = start;
+                this.end = end;
+                this.open = open;
+                this.high = high;
+                this.low = low;
+                this.close = close;
+            }
+
+            public long getStart() {
+                return start;
+            }
+
+            public long getEnd() {
+                return end;
+            }
+
+            public boolean hasVolume() {
+                return null != (Integer) volume;
+
+            }
+            public void setVolume(int volume) {
+                this.volume = volume;
+            }
+
+            public int getVolume() {
+                return volume;
+            }
+
+            public void setDelta(int delta) {
+                this.delta = delta;
+            }
+
+            public int getDelta() {
+                return delta;
+            }
+
+            public float getOpen() {
+                return open;
+            }
+
+            public float getHigh() {
+                return high;
+            }
+
+            public float getLow() {
+                return low;
+            }
+
+            public float getClose() {
+                return close;
+            }
+        }
         public SDPCalculator(int startIndex, DataSeries series, Defaults defaults) {
             this.startIndex = startIndex;
             this.series = series;
             this.nextIndex = startIndex;
             this.deltaByPrice = new TreeMap<>();
             this.defaults = defaults;
+
+
+
 
             Instrument instrument = series.getInstrument();
             this.tradingDayStart = instrument.getStartOfDay(series.getStartTime(nextIndex), false);
@@ -222,6 +392,9 @@ public class DeltaPivots3 extends Study
             rthEnd = rthStart + (2 * Util.MILLIS_IN_HOUR) + (20 * Util.MILLIS_IN_MINUTE);//instrument.getEndOfDay(tickTime, true) - Util.MILLIS_IN_HOUR - (10 * Util.MILLIS_IN_MINUTE);
         }
 
+        public SDP getLastSDP() {
+            return this.lastSDP;
+        }
         private void calculateRollingWindow() {
             int windowSize = getRollingWindowSizeForSession(currentSession);
 
@@ -276,14 +449,16 @@ public class DeltaPivots3 extends Study
         }
 
         class SDP {
+            private final String instrumentSymbol;
             private final float high;
             private final float low;
             private final float mid;
 
-            public SDP(float high, float low) {
+            public SDP(float high, float low, String instrumentSymbol) {
                 this.high = high;
                 this.low = low;
                 this.mid = high - ((high - low) / 2);
+                this.instrumentSymbol = instrumentSymbol;
             }
 
             public float getHigh() {
@@ -296,6 +471,30 @@ public class DeltaPivots3 extends Study
             public float getMid() {
                 return mid;
             }
+
+            public String getInstrumentSymbol() {
+                return instrumentSymbol;
+            }
+
+            /**
+             *
+             * @param percent whole value e.g. 100 for 100%, 250 for 250%
+             * @return the value of the extension
+             */
+            public float getExtensionAbove(int percent) {
+                float breadth = high - low;
+                return mid + (breadth / 2) + (breadth * (percent / 100f));
+            }
+
+            /**
+             *
+             * @param percent whole value e.g. 100 for 100%, 250 for 250%
+             * @return the value of the extension
+             */
+            public float getExtensionBelow(int percent) {
+                float breadth = high - low;
+                return mid- (breadth / 2) - (breadth * (percent / 100f));
+            }
         }
 
         private SDP calculateSDPFromWindow(int windowStart, int windowSize) {
@@ -306,7 +505,7 @@ public class DeltaPivots3 extends Study
                 if (series.getLow(i) < low) low = series.getLow(i);
             }
 
-            return new SDP(high, low);
+            return new SDP(high, low, series.getInstrument().getSymbol());
         }
 
         public void onTick(Tick tick) {
@@ -316,6 +515,7 @@ public class DeltaPivots3 extends Study
             }
             long tickTime = tick.getTime();
             Instrument instrument = series.getInstrument();
+
 
             // if new day, recalculate sessions
             if (tickTime > nextTradingDayStart) {
@@ -363,6 +563,12 @@ public class DeltaPivots3 extends Study
                 nextEnd = currentEnd;
                 nextStart = currentStart;
             }
+
+            runningVolume += tick.getVolume();
+//            if (runningVolume >= getIntervalForSession(currentSession))
+                // Bar currentBar = new Bar(start, end, open, high, low, close);
+                // barsForSession.add(currentBar)
+                // if we have enough bars, calculate rolling window
 
             if (tickTime >= series.getEndTime(nextIndex)){
 //                debug("nextIndex: " + nextIndex + " tickTimeIndex: " + series.findIndex(tickTime));
@@ -419,8 +625,11 @@ public class DeltaPivots3 extends Study
                         nextStart = rthStart;
                         nextEnd = rthEnd;
                         break;
+                    default:
+                        return;
                 }
-
+                lastSDP = sdp;
+;
 
 
 //                debug("currentSession: " + currentSession);
