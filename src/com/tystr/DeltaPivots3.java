@@ -34,15 +34,18 @@ import java.util.List;
         menu="Tystr",
         overlay=true,
         studyOverlay=true,
-        requiresVolume = true
+        requiresVolume = true,
+        supportsBarUpdates = false
 )
 public class DeltaPivots3 extends Study
 {
     enum Values { DELTA };
     private ArrayList<Line> lines;
 
+    private Instrument instrument;
     private SDPCalculator calculator;
     private boolean isCalculating;
+    private int lastIndex = 0;
 
     @Override
     public void initialize(Defaults defaults)
@@ -103,10 +106,28 @@ public class DeltaPivots3 extends Study
     }
 
     @Override
+    public void onBarUpdate(DataContext ctx) {}
+    @Override
+    public void onBarOpen(DataContext ctx) {}
+    @Override
+    public void onBarClose(DataContext ctx) {}
+
+    @Override
+    public void destroy()
+    {
+        super.destroy();
+        if (instrument != null) instrument.removeListener(calculator);
+    }
+
+    @Override
     protected void calculateValues(DataContext ctx) {
         DataSeries series = ctx.getDataSeries();
+//        System.err.println("Series size: " + series.size());
+//        System.err.println("lastIndex: " + lastIndex);
+        if (series.size() - lastIndex == 1) return; //Skip calculating on new bars
+        lastIndex = series.size();
         if  (series.size() == 0 || isCalculating) return;
-        Instrument instrument = series.getInstrument();
+        instrument = series.getInstrument();
 
         int maxDays = 10; // @todo configure this
         int startIndex = 1;
