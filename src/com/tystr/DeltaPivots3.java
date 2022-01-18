@@ -2,6 +2,7 @@ package com.tystr;
 
 import com.motivewave.platform.sdk.common.*;
 import com.motivewave.platform.sdk.common.desc.*;
+import com.motivewave.platform.sdk.common.desc.FileDescriptor;
 import com.motivewave.platform.sdk.draw.Figure;
 import com.motivewave.platform.sdk.draw.Line;
 import com.motivewave.platform.sdk.draw.Marker;
@@ -14,7 +15,11 @@ import study_examples.MyMovingAverage;
 
 import java.awt.*;
 import java.io.*;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.*;
 import java.util.*;
 import java.util.List;
@@ -67,6 +72,7 @@ public class DeltaPivots3 extends Study
         SettingGroup advancedGroup = advancedTab.addGroup("Debug");
         advancedGroup.addRow(new BooleanDescriptor("HighlightWindows", "Show Session Window Start and End", false));
 
+
         lines = new ArrayList<>();
 
 
@@ -83,6 +89,11 @@ public class DeltaPivots3 extends Study
         sdpLineGroup.addRow(new PathDescriptor("RthSDP", "RTH SDP", defaults.getBlue(), 1.0f, null, false, false, true));
         sdpLineGroup.addRow(new PathDescriptor("GbxSDP", "Gbx SDP", defaults.getYellow(), 1.0f, null, false, false, true));
         sdpLineGroup.addRow(new PathDescriptor("EuroSDP", "Euro SDP", defaults.getRed(), 1.0f, null, false, false, true));
+
+        grp = tab.addGroup("CSV Output");
+        grp.addRow(new BooleanDescriptor("WriteCsv", "Write Levels to CSV", true));
+        grp.addRow(new StringDescriptor("CsvFilePath", "Path (filename will be SDP_<SYMBOL>.csv):", ""));
+        sd.addDependency(new EnabledDependency("WriteCsv", "CsvFilePath"));
 
         desc.declarePath("RthSDP", "RthSDP");
         desc.declarePath("GbxSDP", "GbxSDP");
@@ -112,8 +123,9 @@ public class DeltaPivots3 extends Study
                 calculator = new SDPCalculator(finalStartIndex, series, ctx.getDefaults());
                 instrument.forEachTick(series.getStartTime(finalStartIndex), ctx.getCurrentTime() + Util.MILLIS_IN_MINUTE, ctx.isRTH(), calculator);
             } finally {
-                // IF WRITE TO FILE TRUE
-                writeFile(calculator.getLastSDP());
+                if (getSettings().getBoolean("WriteCsv")) {
+                    writeFile(calculator.getLastSDP(), getSettings().getString("CsvFilePath"));
+                }
                 isCalculating = false;
             }
         });
@@ -129,9 +141,18 @@ public class DeltaPivots3 extends Study
                 .append("\n");
     }
 
-    protected void writeFile(SDPCalculator.SDP sdp) {
+    /**
+     * Writes SDP levels to a csv file for use with the Cloud Levels study
+     * @param sdp
+     * @param filePath
+     */
+    protected void writeFile(SDPCalculator.SDP sdp, String filePath) {
+        Path path = Paths.get(filePath);
+        if (!Files.exists(path) || !Files.isWritable(path)) {
+            System.err.println("Unable to write to " + path.toString());
+            return;
+        }
 
-        String filePath = "/tmp/"; // get from settings
         StringBuilder content = new StringBuilder()
                 .append("Symbol,Price Level,Note,Foreground Color,Background Color,Diameter\n");
 
@@ -203,13 +224,16 @@ public class DeltaPivots3 extends Study
 
         System.err.println("\nFILE CONTENTS\n");
         System.err.println(content.toString() + "\n");
+        System.err.println("Using file path " + path.toString());
+        String fileName = path.toString() + "/SDP_" + sdp.getInstrumentSymbol() + ".csv";
 
         try (Writer writer = new BufferedWriter(new OutputStreamWriter(
-                new FileOutputStream("/tmp/SDP_"+sdp.getInstrumentSymbol() + ".csv"), StandardCharsets.UTF_8))) {
+                new FileOutputStream(fileName), StandardCharsets.UTF_8))) {
             writer.write(content.toString());
         } catch (IOException e) {
             System.err.println(e.getMessage());
         }
+        System.err.println("levels written to " + fileName);
     }
 
     @Override
